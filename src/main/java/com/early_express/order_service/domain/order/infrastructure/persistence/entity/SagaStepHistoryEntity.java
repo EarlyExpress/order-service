@@ -90,7 +90,7 @@ public class SagaStepHistoryEntity {
     public static SagaStepHistoryEntity fromDomain(SagaStepHistory history) {
         return SagaStepHistoryEntity.builder()
                 .id(history.getId())
-                .sagaIdValue(history.getSagaIdValue())
+//                .sagaIdValue(history.getSagaIdValue())
                 .step(history.getStep())
                 .status(history.getStatus())
                 .request(history.getRequest())
@@ -132,5 +132,12 @@ public class SagaStepHistoryEntity {
      */
     public void setSaga(OrderSagaEntity saga) {
         this.saga = saga;
+    }
+
+    /**
+     * Saga ID 설정 (fromDomain 이후 사용)
+     */
+    public void setSagaIdValue(String sagaIdValue) {
+        this.sagaIdValue = sagaIdValue;
     }
 }
