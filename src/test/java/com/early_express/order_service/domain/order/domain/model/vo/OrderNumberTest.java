@@ -52,7 +52,7 @@ class OrderNumberTest {
         // when & then
         assertThatThrownBy(() -> OrderNumber.from("INVALID-FORMAT"))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("형식");
+                .hasMessageContaining("주문 번호는 'ORD-'로 시작해야 합니다");
     }
 
     @Test
