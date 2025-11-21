@@ -61,7 +61,7 @@ public class OrderSaga {
      */
     public static OrderSaga create(OrderId orderId) {
         return OrderSaga.builder()
-                .sagaId(SagaId.create())
+                .sagaId(null)
                 .orderId(orderId)
                 .status(SagaStatus.PENDING)
                 .compensationData(CompensationData.empty())
