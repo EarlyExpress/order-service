@@ -6,6 +6,7 @@ import com.early_express.order_service.domain.order.domain.model.SagaStep;
 import com.early_express.order_service.domain.order.domain.model.vo.CompensationData;
 import com.early_express.order_service.domain.order.domain.model.vo.OrderId;
 import com.early_express.order_service.domain.order.domain.model.vo.SagaId;
+import com.early_express.order_service.global.common.utils.UuidUtils;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -85,7 +86,7 @@ public class OrderSagaEntity {
      */
     public static OrderSagaEntity fromDomain(OrderSaga saga) {
         OrderSagaEntity entity = OrderSagaEntity.builder()
-                .sagaId(saga.getSagaIdValue())
+                .sagaId(UuidUtils.generate())
                 .orderId(saga.getOrderIdValue())
                 .status(saga.getStatus())
                 .currentStep(saga.getCurrentStep())
@@ -98,6 +99,7 @@ public class OrderSagaEntity {
         // Step History 변환
         saga.getStepHistory().forEach(history -> {
             SagaStepHistoryEntity historyEntity = SagaStepHistoryEntity.fromDomain(history);
+            historyEntity.setSagaIdValue(entity.getSagaId());
             entity.addStepHistory(historyEntity);
         });
 
