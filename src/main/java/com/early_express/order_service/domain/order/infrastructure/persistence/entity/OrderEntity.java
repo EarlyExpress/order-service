@@ -46,6 +46,13 @@ public class OrderEntity extends BaseEntity {
     @Column(name = "receiver_hub_id", nullable = false, length = 36)
     private String receiverHubId;
 
+    /**
+     * 실제 도착 허브 ID
+     * Hub Service가 주소 기반으로 결정한 실제 도착 허브
+     */
+    @Column(name = "destination_hub_id", length = 36)
+    private String destinationHubId;
+
     // ===== 상품 정보 =====
     @Column(name = "product_id", nullable = false, length = 36)
     private String productId;
@@ -167,6 +174,7 @@ public class OrderEntity extends BaseEntity {
             String supplierHubId,
             String receiverCompanyId,
             String receiverHubId,
+            String destinationHubId,
             String productId,
             String productHubId,
             Integer quantity,
@@ -208,6 +216,7 @@ public class OrderEntity extends BaseEntity {
         this.supplierHubId = supplierHubId;
         this.receiverCompanyId = receiverCompanyId;
         this.receiverHubId = receiverHubId;
+        this.destinationHubId = destinationHubId;
         this.productId = productId;
         this.productHubId = productHubId;
         this.quantity = quantity;
@@ -255,6 +264,7 @@ public class OrderEntity extends BaseEntity {
                 .supplierHubId(order.getCompanyInfo().getSupplierHubId())
                 .receiverCompanyId(order.getCompanyInfo().getReceiverCompanyId())
                 .receiverHubId(order.getCompanyInfo().getReceiverHubId())
+                .destinationHubId(order.getDestinationHubId())
                 .productId(order.getProductInfo().getProductId())
                 .productHubId(order.getProductInfo().getProductHubId())
                 .quantity(order.getProductInfo().getQuantity())
@@ -305,6 +315,7 @@ public class OrderEntity extends BaseEntity {
                         this.receiverCompanyId,
                         this.receiverHubId
                 ))
+                .destinationHubId(this.destinationHubId)
                 .productInfo(ProductInfo.builder()
                         .productId(this.productId)
                         .productHubId(this.productHubId)
@@ -364,22 +375,40 @@ public class OrderEntity extends BaseEntity {
      * 도메인 모델로 엔티티 업데이트
      */
     public void updateFromDomain(Order order) {
+        // 도착 허브 ID (Hub Service가 결정)
+        this.destinationHubId = order.getDestinationHubId();
+
+        // 상품 정보
         this.productHubId = order.getProductInfo().getProductHubId();
+
+        // 배송 정보
         this.requiresHubDelivery = order.getDeliveryInfo().getRequiresHubDelivery();
         this.hubDeliveryId = order.getDeliveryInfo().getHubDeliveryId();
         this.lastMileDeliveryId = order.getDeliveryInfo().getLastMileDeliveryId();
+
+        // AI 계산 결과 (경로 정보, 발송 시한, 예상 도착 시간)
         this.calculatedDepartureDeadline = order.getAiCalculationResult().getCalculatedDepartureDeadline();
         this.estimatedDeliveryTime = order.getAiCalculationResult().getEstimatedDeliveryTime();
         this.routeInfo = order.getAiCalculationResult().getRouteInfo();
+
+        // 상태
         this.status = order.getStatus();
+
+        // 금액 정보
         this.paymentId = order.getAmountInfo().getPaymentId();
+
+        // PG 결제 정보
         this.pgPaymentKey = order.getPgPaymentInfo().getPgPaymentKey();
+
+        // 배송 진행 정보
         this.actualDepartureTime = order.getDeliveryProgressInfo().getActualDepartureTime();
         this.hubArrivalTime = order.getDeliveryProgressInfo().getHubArrivalTime();
         this.finalDeliveryStartTime = order.getDeliveryProgressInfo().getFinalDeliveryStartTime();
         this.actualDeliveryTime = order.getDeliveryProgressInfo().getActualDeliveryTime();
         this.signature = order.getDeliveryProgressInfo().getSignature();
         this.actualReceiverName = order.getDeliveryProgressInfo().getActualReceiverName();
+
+        // 취소 정보
         this.cancelReason = order.getCancelReason();
         this.cancelledAt = order.getCancelledAt();
     }
