@@ -44,6 +44,19 @@ class SagaStepHistoryEntityTest {
         }
 
         @Test
+        @DisplayName("sagaId가 null인 경우 sagaIdValue도 null로 변환한다")
+        void shouldConvertNullSagaIdToNull() {
+            // given
+            SagaStepHistory history = SagaStepHistory.create(null, SagaStep.STOCK_RESERVE);
+
+            // when
+            SagaStepHistoryEntity entity = SagaStepHistoryEntity.fromDomain(history);
+
+            // then
+            assertThat(entity.getSagaIdValue()).isNull();
+        }
+
+        @Test
         @DisplayName("실패한 Step의 에러 메시지를 변환한다")
         void shouldConvertErrorMessage() {
             // given
@@ -233,6 +246,42 @@ class SagaStepHistoryEntityTest {
     }
 
     @Nested
+    @DisplayName("setSagaIdValue 메서드는")
+    class SetSagaIdValueTest {
+
+        @Test
+        @DisplayName("sagaIdValue를 설정한다")
+        void shouldSetSagaIdValue() {
+            // given
+            SagaStepHistoryEntity entity = SagaStepHistoryEntity.fromDomain(
+                    SagaStepHistory.create(null, SagaStep.STOCK_RESERVE)
+            );
+            assertThat(entity.getSagaIdValue()).isNull();
+
+            // when
+            entity.setSagaIdValue("new-saga-id");
+
+            // then
+            assertThat(entity.getSagaIdValue()).isEqualTo("new-saga-id");
+        }
+
+        @Test
+        @DisplayName("기존 sagaIdValue를 덮어쓸 수 있다")
+        void shouldOverwriteExistingSagaIdValue() {
+            // given
+            SagaStepHistoryEntity entity = createTestStepHistoryEntity();
+            String originalSagaId = entity.getSagaIdValue();
+
+            // when
+            entity.setSagaIdValue("updated-saga-id");
+
+            // then
+            assertThat(entity.getSagaIdValue()).isNotEqualTo(originalSagaId);
+            assertThat(entity.getSagaIdValue()).isEqualTo("updated-saga-id");
+        }
+    }
+
+    @Nested
     @DisplayName("도메인-엔티티 양방향 변환은")
     class BidirectionalConversionTest {
 
@@ -255,6 +304,24 @@ class SagaStepHistoryEntityTest {
             assertThat(convertedHistory.getStatus()).isEqualTo(originalHistory.getStatus());
             assertThat(convertedHistory.getRequest()).isEqualTo(originalHistory.getRequest());
             assertThat(convertedHistory.getResponse()).isEqualTo(originalHistory.getResponse());
+        }
+
+        @Test
+        @DisplayName("sagaId가 null인 경우도 양방향 변환이 가능하다")
+        void shouldHandleNullSagaIdInRoundTrip() {
+            // given
+            SagaStepHistory originalHistory = SagaStepHistory.create(null, SagaStep.STOCK_RESERVE);
+
+            // when
+            SagaStepHistoryEntity entity = SagaStepHistoryEntity.fromDomain(originalHistory);
+
+            // setSagaIdValue로 설정
+            entity.setSagaIdValue("saga-123");
+
+            SagaStepHistory convertedHistory = entity.toDomain();
+
+            // then
+            assertThat(convertedHistory.getSagaIdValue()).isEqualTo("saga-123");
         }
 
         @Test
