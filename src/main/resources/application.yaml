@@ -103,6 +103,11 @@ springdoc:
   server:
     url: http://localhost:4000
 
+client:
+  inventory-service:
+    url: {INVENTORY_SERVICE_URL}
+  payment-service:
+    url: {PAYMENT_SERVICE_URL}
 
 # ========================================
 # 서비스별 커스터마이징이 필요한 설정 예시

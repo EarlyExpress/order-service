@@ -53,3 +53,9 @@ logging:
   level:
     com.early_express: DEBUG
     org.springframework.security: DEBUG
+
+client:
+  inventory-service:
+    url: inventory-service
+  payment-service:
+    url: payment-service
