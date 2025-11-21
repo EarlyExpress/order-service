@@ -388,7 +388,7 @@ public class Order {
         if (!this.status.isInDelivery()) {
             throw new OrderException(
                     OrderErrorCode.INVALID_ORDER_STATUS,
-                    String.format("%s는 배송 진행 중 상태에서만 가능합니다. 현재 상태: %s",
+                    String.format("%s은(는) 배송 진행 중 상태에서만 가능합니다. 현재 상태: %s",
                             operation,
                             this.status.getDescription())
             );
