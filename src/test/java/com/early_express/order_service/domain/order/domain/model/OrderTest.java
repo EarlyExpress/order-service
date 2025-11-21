@@ -86,6 +86,7 @@ class OrderTest {
         assertThat(order.getDeliveryInfo()).isNotNull();
         assertThat(order.getAiCalculationResult()).isNotNull();
         assertThat(order.getDeliveryProgressInfo()).isNotNull();
+        assertThat(order.getDestinationHubId()).isNull();
     }
 
     // ===== Saga Step 테스트 =====
@@ -197,8 +198,34 @@ class OrderTest {
     }
 
     @Test
-    @DisplayName("경로 정보를 저장할 수 있다")
-    void saveRouteInfo() {
+    @DisplayName("도착 허브 ID를 업데이트할 수 있다")
+    void updateDestinationHubId() {
+        // given
+        Order order = createTestOrder();
+        String destinationHubId = "HUB-005";
+
+        // when
+        order.updateDestinationHubId(destinationHubId);
+
+        // then
+        assertThat(order.getDestinationHubId()).isEqualTo(destinationHubId);
+    }
+
+    @Test
+    @DisplayName("도착 허브 ID가 null이면 예외가 발생한다")
+    void updateDestinationHubIdWithNull() {
+        // given
+        Order order = createTestOrder();
+
+        // when & then
+        assertThatThrownBy(() -> order.updateDestinationHubId(null))
+                .isInstanceOf(OrderException.class)
+                .hasMessageContaining("도착 허브 ID는 null일 수 없습니다");
+    }
+
+    @Test
+    @DisplayName("경로 정보를 업데이트할 수 있다")
+    void updateRouteInfo() {
         // given
         Order order = createTestOrder();
         prepareOrderForRouteCalculation(order);
@@ -206,7 +233,7 @@ class OrderTest {
         String routeInfoJson = "{\"hubs\":[\"HUB-001\",\"HUB-002\"]}";
 
         // when
-        order.saveRouteInfo(routeInfoJson);
+        order.updateRouteInfo(routeInfoJson);
 
         // then
         assertThat(order.getAiCalculationResult()).isNotNull();
@@ -215,25 +242,63 @@ class OrderTest {
     }
 
     @Test
-    @DisplayName("AI 시간 계산을 완료할 수 있다")
-    void completeAiCalculation() {
+    @DisplayName("경로 정보가 null이면 예외가 발생한다")
+    void updateRouteInfoWithNull() {
+        // given
+        Order order = createTestOrder();
+
+        // when & then
+        assertThatThrownBy(() -> order.updateRouteInfo(null))
+                .isInstanceOf(OrderException.class)
+                .hasMessageContaining("경로 정보는 null일 수 없습니다");
+    }
+
+    @Test
+    @DisplayName("배송 정보를 업데이트할 수 있다")
+    void updateDeliveryInfo() {
+        // given
+        Order order = createTestOrder();
+        DeliveryInfo newDeliveryInfo = DeliveryInfo.builder()
+                .requiresHubDelivery(true)
+                .hubDeliveryId("HUB-DELIVERY-123")
+                .lastMileDeliveryId("LAST-MILE-456")
+                .build();
+
+        // when
+        order.updateDeliveryInfo(newDeliveryInfo);
+
+        // then
+        assertThat(order.getDeliveryInfo()).isEqualTo(newDeliveryInfo);
+        assertThat(order.getDeliveryInfo().getHubDeliveryId()).isEqualTo("HUB-DELIVERY-123");
+        assertThat(order.getDeliveryInfo().getLastMileDeliveryId()).isEqualTo("LAST-MILE-456");
+    }
+
+    @Test
+    @DisplayName("배송 정보가 null이면 예외가 발생한다")
+    void updateDeliveryInfoWithNull() {
+        // given
+        Order order = createTestOrder();
+
+        // when & then
+        assertThatThrownBy(() -> order.updateDeliveryInfo(null))
+                .isInstanceOf(OrderException.class)
+                .hasMessageContaining("배송 정보는 null일 수 없습니다");
+    }
+
+    @Test
+    @DisplayName("경로 정보 업데이트 시 허브 배송 필요 여부를 확인할 수 있다")
+    void checkRequiresHubDeliveryFromRouteInfo() {
         // given
         Order order = createTestOrder();
         prepareOrderForRouteCalculation(order);
         order.startRouteCalculation();
-        order.saveRouteInfo("{\"hubs\":[\"HUB-001\",\"HUB-002\"]}");
-        LocalDateTime departureDeadline = LocalDateTime.now().plusHours(2);
-        LocalDateTime estimatedDeliveryTime = LocalDateTime.now().plusHours(24);
+        String routeInfoJson = "{\"hubs\":[\"HUB-001\",\"HUB-002\"]}";
 
         // when
-        order.completeAiCalculation(departureDeadline, estimatedDeliveryTime, "계산 완료");
+        order.updateRouteInfo(routeInfoJson);
 
         // then
-        assertThat(order.getAiCalculationResult()).isNotNull();
-        assertThat(order.getAiCalculationResult().isCalculated()).isTrue();
-        assertThat(order.getAiCalculationResult().getCalculatedDepartureDeadline())
-                .isEqualTo(departureDeadline);
-        assertThat(order.requiresHubDelivery()).isTrue(); // 허브가 2개 이상
+        assertThat(order.getAiCalculationResult().requiresHubDelivery()).isTrue();
     }
 
     @Test
@@ -266,8 +331,8 @@ class OrderTest {
     }
 
     @Test
-    @DisplayName("주문을 확정할 수 있다")
-    void confirmOrder() {
+    @DisplayName("주문을 확정할 수 있다 - PAYMENT_VERIFIED 상태")
+    void confirmOrderFromPaymentVerified() {
         // given
         Order order = createTestOrder();
         prepareOrderForConfirmation(order);
@@ -277,6 +342,46 @@ class OrderTest {
 
         // then
         assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
+    }
+
+    @Test
+    @DisplayName("주문을 확정할 수 있다 - DELIVERY_CREATING 상태")
+    void confirmOrderFromDeliveryCreating() {
+        // given
+        Order order = createTestOrder();
+        prepareOrderForConfirmation(order);
+        order.startDeliveryCreation();
+
+        // when
+        order.confirm();
+
+        // then
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
+    }
+
+    @Test
+    @DisplayName("잘못된 상태에서 주문 확정하면 예외가 발생한다")
+    void confirmOrderFromInvalidStatus() {
+        // given
+        Order order = createTestOrder();
+
+        // when & then
+        assertThatThrownBy(() -> order.confirm())
+                .isInstanceOf(OrderException.class)
+                .hasMessageContaining("주문 확정은 결제 검증 완료 후에만 가능합니다");
+    }
+
+    @Test
+    @DisplayName("배송 생성을 시작할 수 있다")
+    void startDeliveryCreation() {
+        // given
+        Order order = createTestOrder();
+
+        // when
+        order.startDeliveryCreation();
+
+        // then
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.DELIVERY_CREATING);
     }
 
     // ===== 배송 진행 테스트 =====
@@ -299,6 +404,19 @@ class OrderTest {
     }
 
     @Test
+    @DisplayName("CONFIRMED 상태가 아니면 허브 배송을 시작할 수 없다")
+    void startHubDeliveryFromInvalidStatus() {
+        // given
+        Order order = createTestOrder();
+        LocalDateTime departureTime = LocalDateTime.now();
+
+        // when & then
+        assertThatThrownBy(() -> order.startHubDelivery(departureTime))
+                .isInstanceOf(OrderException.class)
+                .hasMessageContaining("허브 배송 시작는 주문 확정 상태에서만 가능합니다.");
+    }
+
+    @Test
     @DisplayName("허브에 도착할 수 있다")
     void arriveAtHub() {
         // given
@@ -314,6 +432,19 @@ class OrderTest {
         assertThat(order.getStatus()).isEqualTo(OrderStatus.HUB_ARRIVED);
         assertThat(order.getDeliveryProgressInfo().getHubArrivalTime())
                 .isEqualTo(arrivalTime);
+    }
+
+    @Test
+    @DisplayName("배송 중이 아니면 허브에 도착할 수 없다")
+    void arriveAtHubFromInvalidStatus() {
+        // given
+        Order order = createTestOrder();
+        LocalDateTime arrivalTime = LocalDateTime.now();
+
+        // when & then
+        assertThatThrownBy(() -> order.arriveAtHub(arrivalTime))
+                .isInstanceOf(OrderException.class)
+                .hasMessageContaining("허브 도착은(는) 배송 진행 중 상태에서만 가능합니다");
     }
 
     @Test
@@ -363,6 +494,23 @@ class OrderTest {
         assertThat(order.isCompleted()).isTrue();
         assertThat(order.getDeliveryProgressInfo().getActualDeliveryTime())
                 .isEqualTo(completionTime);
+        assertThat(order.getDeliveryProgressInfo().getSignature())
+                .isEqualTo(signature);
+        assertThat(order.getDeliveryProgressInfo().getActualReceiverName())
+                .isEqualTo(actualReceiverName);
+    }
+
+    @Test
+    @DisplayName("IN_DELIVERY 상태가 아니면 배송을 완료할 수 없다")
+    void completeDeliveryFromInvalidStatus() {
+        // given
+        Order order = createTestOrder();
+        LocalDateTime completionTime = LocalDateTime.now();
+
+        // when & then
+        assertThatThrownBy(() -> order.completeDelivery(completionTime, "signature", "홍길동"))
+                .isInstanceOf(OrderException.class)
+                .hasMessageContaining("배송 완료는 배송 중 상태에서만 가능합니다.");
     }
 
     // ===== 취소 및 실패 테스트 =====
@@ -518,6 +666,7 @@ class OrderTest {
                 .id(OrderId.create()) // 테스트용 ID 생성
                 .orderNumber(orderNumber)
                 .companyInfo(companyInfo)
+                .destinationHubId(null)
                 .productInfo(productInfo)
                 .deliveryInfo(DeliveryInfo.initial())
                 .receiverInfo(receiverInfo)
