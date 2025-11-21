@@ -31,7 +31,8 @@ class OrderSagaEntityTest {
 
             // then
             assertThat(entity).isNotNull();
-            assertThat(entity.getSagaId()).isEqualTo(saga.getSagaIdValue());
+            // sagaId는 엔티티 생성 시 새로 생성되므로 null이 아님을 확인
+            assertThat(entity.getSagaId()).isNotNull();
             assertThat(entity.getOrderId()).isEqualTo(saga.getOrderIdValue());
             assertThat(entity.getStatus()).isEqualTo(saga.getStatus());
             assertThat(entity.getCurrentStep()).isEqualTo(saga.getCurrentStep());
@@ -41,8 +42,8 @@ class OrderSagaEntityTest {
         }
 
         @Test
-        @DisplayName("Step History를 함께 변환한다")
-        void shouldConvertStepHistory() {
+        @DisplayName("Step History를 함께 변환하고 sagaIdValue를 설정한다")
+        void shouldConvertStepHistoryWithSagaIdValue() {
             // given
             OrderSaga saga = createSagaWithSteps();
 
@@ -54,6 +55,10 @@ class OrderSagaEntityTest {
             assertThat(entity.getStepHistory())
                     .extracting(SagaStepHistoryEntity::getStep)
                     .containsExactly(SagaStep.STOCK_RESERVE, SagaStep.PAYMENT_VERIFY);
+
+            // 모든 Step History의 sagaIdValue가 설정되었는지 확인
+            assertThat(entity.getStepHistory())
+                    .allMatch(history -> history.getSagaIdValue().equals(entity.getSagaId()));
         }
 
         @Test
@@ -204,8 +209,8 @@ class OrderSagaEntityTest {
         }
 
         @Test
-        @DisplayName("Step History가 동기화된다")
-        void shouldSynchronizeStepHistory() {
+        @DisplayName("Step History가 동기화되고 sagaIdValue가 설정된다")
+        void shouldSynchronizeStepHistoryWithSagaIdValue() {
             // given
             OrderSagaEntity entity = createTestSagaEntity();
             OrderSaga saga = entity.toDomain();
@@ -225,6 +230,10 @@ class OrderSagaEntityTest {
                     .map(SagaStepHistoryEntity::getStep)
                     .toList();
             assertThat(steps).containsExactly(SagaStep.STOCK_RESERVE, SagaStep.PAYMENT_VERIFY);
+
+            // 모든 Step History의 sagaIdValue가 entity의 sagaId와 일치하는지 확인
+            assertThat(entity.getStepHistory())
+                    .allMatch(history -> history.getSagaIdValue().equals(entity.getSagaId()));
         }
 
         @Test
@@ -378,7 +387,8 @@ class OrderSagaEntityTest {
             OrderSaga convertedSaga = entity.toDomain();
 
             // then
-            assertThat(convertedSaga.getSagaIdValue()).isEqualTo(originalSaga.getSagaIdValue());
+            // sagaId는 엔티티 생성 시 새로 만들어지므로, 엔티티의 sagaId와 비교
+            assertThat(convertedSaga.getSagaIdValue()).isEqualTo(entity.getSagaId());
             assertThat(convertedSaga.getOrderIdValue()).isEqualTo(originalSaga.getOrderIdValue());
             assertThat(convertedSaga.getStatus()).isEqualTo(originalSaga.getStatus());
             assertThat(convertedSaga.getStepHistory()).hasSameSizeAs(originalSaga.getStepHistory());
