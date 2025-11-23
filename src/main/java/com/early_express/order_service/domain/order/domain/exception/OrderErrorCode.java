@@ -12,6 +12,8 @@ import lombok.RequiredArgsConstructor;
  * - SAGA_1xx: Saga 실행 관련 에러
  * - STOCK_2xx: 재고 관련 에러
  * - DELIVERY_3xx: 배송 관련 에러
+ * - EXTERNAL_4xx: 외부 서비스 연동 에러
+ * - AI_5xx: AI 서비스 관련 에러
  */
 @Getter
 @RequiredArgsConstructor
@@ -39,118 +41,49 @@ public enum OrderErrorCode implements ErrorCode {
 
     // ===== 재고 관련 에러 (STOCK_2xx) =====
     INSUFFICIENT_STOCK("STOCK_201", "재고가 부족합니다.", 409),
-
-    /**
-     * 재고 예약 실패
-     */
     STOCK_RESERVATION_FAILED("STOCK_202", "재고 예약에 실패했습니다.", 500),
-
-    /**
-     * 재고 복원 실패
-     */
     STOCK_RESTORE_FAILED("STOCK_203", "재고 복원에 실패했습니다.", 500),
-
-    /**
-     * 재고 정보를 찾을 수 없음
-     */
     STOCK_INFO_NOT_FOUND("STOCK_204", "재고 정보를 찾을 수 없습니다.", 404),
-
-    /**
-     * 재고 예약 ID가 유효하지 않음
-     */
     INVALID_RESERVATION_ID("STOCK_205", "유효하지 않은 재고 예약 ID입니다.", 400),
 
     // ===== 배송 관련 에러 (DELIVERY_3xx) =====
-    /**
-     * 배송 생성 실패
-     */
     DELIVERY_CREATION_FAILED("DELIVERY_301", "배송 생성에 실패했습니다.", 500),
-
-    /**
-     * 허브 배송 생성 실패
-     */
     HUB_DELIVERY_CREATION_FAILED("DELIVERY_302", "허브 배송 생성에 실패했습니다.", 500),
-
-    /**
-     * 업체 배송 생성 실패
-     */
     LAST_MILE_DELIVERY_CREATION_FAILED("DELIVERY_303", "업체 배송 생성에 실패했습니다.", 500),
-
-    /**
-     * 배송 취소 실패
-     */
     DELIVERY_CANCELLATION_FAILED("DELIVERY_304", "배송 취소에 실패했습니다.", 500),
-
-    /**
-     * 경로를 찾을 수 없음
-     */
     ROUTE_NOT_FOUND("DELIVERY_305", "배송 경로를 찾을 수 없습니다.", 404),
-
-    /**
-     * 경로 계산 실패
-     */
     ROUTE_CALCULATION_FAILED("DELIVERY_306", "경로 계산에 실패했습니다.", 500),
-
-    /**
-     * AI 발송 시한 계산 실패
-     */
-    AI_DEADLINE_CALCULATION_FAILED("DELIVERY_307", "AI 발송 시한 계산에 실패했습니다.", 500),
-
-    /**
-     * 배송 상태 업데이트 실패
-     */
     DELIVERY_STATUS_UPDATE_FAILED("DELIVERY_308", "배송 상태 업데이트에 실패했습니다.", 500),
-
-    /**
-     * 배송 정보를 찾을 수 없음
-     */
     DELIVERY_NOT_FOUND("DELIVERY_309", "배송 정보를 찾을 수 없습니다.", 404),
 
     // ===== 외부 서비스 연동 에러 (EXTERNAL_4xx) =====
-    /**
-     * 재고 서비스 연동 실패
-     */
     INVENTORY_SERVICE_ERROR("EXTERNAL_401", "재고 서비스 연동 중 오류가 발생했습니다.", 502),
-
-    /**
-     * 결제 서비스 연동 실패
-     */
     PAYMENT_SERVICE_ERROR("EXTERNAL_402", "결제 서비스 연동 중 오류가 발생했습니다.", 502),
-
-    /**
-     * 허브 서비스 연동 실패
-     */
     HUB_SERVICE_ERROR("EXTERNAL_403", "허브 서비스 연동 중 오류가 발생했습니다.", 502),
-
-    /**
-     * AI 서비스 연동 실패
-     */
     AI_SERVICE_ERROR("EXTERNAL_404", "AI 서비스 연동 중 오류가 발생했습니다.", 502),
-
-    /**
-     * 허브 배송 서비스 연동 실패
-     */
     HUB_DELIVERY_SERVICE_ERROR("EXTERNAL_405", "허브 배송 서비스 연동 중 오류가 발생했습니다.", 502),
-
-    /**
-     * 업체 배송 서비스 연동 실패
-     */
     LAST_MILE_DELIVERY_SERVICE_ERROR("EXTERNAL_406", "업체 배송 서비스 연동 중 오류가 발생했습니다.", 502),
-
-    /**
-     * 알림 서비스 연동 실패
-     */
     NOTIFICATION_SERVICE_ERROR("EXTERNAL_407", "알림 서비스 연동 중 오류가 발생했습니다.", 502),
-
-    /**
-     * 추적 서비스 연동 실패
-     */
     TRACKING_SERVICE_ERROR("EXTERNAL_408", "추적 서비스 연동 중 오류가 발생했습니다.", 502),
+    EXTERNAL_SERVICE_TIMEOUT("EXTERNAL_409", "외부 서비스 응답 시간이 초과되었습니다.", 504),
 
-    /**
-     * 외부 서비스 타임아웃
-     */
-    EXTERNAL_SERVICE_TIMEOUT("EXTERNAL_409", "외부 서비스 응답 시간이 초과되었습니다.", 504);
+    // ===== AI 서비스 관련 에러 (AI_5xx) =====
+    AI_CALCULATION_FAILED("AI_501", "AI 시간 계산에 실패했습니다.", 500),
+    AI_DEADLINE_CALCULATION_FAILED("AI_502", "AI 발송 시한 계산에 실패했습니다.", 500),
+    DELIVERY_TIME_NOT_ACHIEVABLE("AI_503", "요청하신 배송 시간을 맞출 수 없습니다.", 422),
+    AI_RESPONSE_INVALID("AI_504", "AI 응답 데이터가 유효하지 않습니다.", 500),
+    AI_SERVICE_UNAVAILABLE("AI_505", "AI 서비스를 사용할 수 없습니다.", 503),
+
+    // ===== Hub Delivery 서비스 관련 에러 (HUB_DELIVERY_xxx) =====
+    HUB_DELIVERY_NOT_FOUND("HUB_DELIVERY_404", "허브 배송을 찾을 수 없습니다.", 404),
+    HUB_DELIVERY_ALREADY_EXISTS("HUB_DELIVERY_409", "이미 허브 배송이 존재합니다.", 409),
+    HUB_DELIVERY_INVALID_ROUTE("HUB_DELIVERY_422", "유효하지 않은 허브 경로입니다.", 422),
+
+    // ===== Last Mile 서비스 관련 에러 (LAST_MILE_5xx) =====
+    LAST_MILE_DELIVERY_NOT_FOUND("LAST_MILE_404", "업체 배송을 찾을 수 없습니다.", 404),
+    LAST_MILE_DELIVERY_ALREADY_EXISTS("LAST_MILE_409", "이미 업체 배송이 존재합니다.", 409),
+    LAST_MILE_DRIVER_NOT_AVAILABLE("LAST_MILE_422", "배정 가능한 배송 담당자가 없습니다.", 422),
+    LAST_MILE_SERVICE_ERROR("LAST_MILE_503", "업체 배송 서비스 오류입니다.", 503);
 
     private final String code;
     private final String message;
