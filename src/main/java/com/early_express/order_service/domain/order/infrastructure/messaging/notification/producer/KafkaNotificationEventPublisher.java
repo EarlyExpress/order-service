@@ -19,7 +19,7 @@ public class KafkaNotificationEventPublisher implements NotificationEventPublish
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
-    @Value("${spring.kafka.topic.notification-requested}")
+    @Value("${spring.kafka.topic.notification-requested-event}")
     private String notificationRequestedTopic;
 
     @Override

@@ -19,7 +19,7 @@ public class KafkaTrackingEventPublisher implements TrackingEventPublisher {
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
-    @Value("${spring.kafka.topic.tracking-start-requested}")
+    @Value("${spring.kafka.topic.tracking-start-requested-event}")
     private String trackingStartRequestedTopic;
 
     @Override
