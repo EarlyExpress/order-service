@@ -36,6 +36,8 @@ spring:
       order-events: order-service-events
       order-payment-verified: order-payment-verified
       payment-events: payment-events
+      notification-requested-event: notification-requested-event
+      tracking-start-requested-event: tracking-start-requested-event
 
   cloud:
     config:
@@ -55,8 +57,14 @@ logging:
 
 client:
   inventory-service:
-    url: inventory-service
+    url: http://inventory-service
   payment-service:
-    url: payment-service
+    url: http://payment-service
   hub-service:
-    url: hub-service
+    url: http://hub-service
+  hub-delivery-service:
+    url: http://hub-delivery-service
+  ai-service:
+    url: http://ai-service
+  last-mile-service:
+    url: http://last-mile-service

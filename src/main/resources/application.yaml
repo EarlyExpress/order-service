@@ -69,6 +69,8 @@ spring:
       order-payment-verified: ${KAFKA_TOPIC_ORDER_PAYMENT_VERIFIED:order-payment-verified}
       # Payment Service가 발행하는 토픽 (Order Service가 구독)
       payment-events: ${KAFKA_TOPIC_PAYMENT_EVENTS:payment-events}
+      notification-requested-event: notification-requested-event
+      tracking-start-requested-event: tracking-start-requested-event
 
 # ===== 서버 포트 설정 =====
 server:
@@ -117,6 +119,12 @@ client:
     url: ${PAYMENT_SERVICE_URL}
   hub-service:
     url: ${HUB_SERVICE_URL}
+  hub-delivery-service:
+    url: hub-delivery-service
+  ai-service:
+    url: ai-service
+  last-mile-service:
+    url: last-mile-service
 
 # ========================================
 # 서비스별 커스터마이징이 필요한 설정 예시
