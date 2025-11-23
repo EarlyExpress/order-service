@@ -196,6 +196,21 @@ public class Order {
     }
 
     /**
+     * AI 계산 결과 업데이트
+     * AI Service의 시간 계산 결과를 반영
+     */
+    public void updateAiCalculationResult(AiCalculationResult aiCalculationResult) {
+        validateNotNull(aiCalculationResult, "AI 계산 결과");
+
+        this.aiCalculationResult = aiCalculationResult;
+
+        log.info("AI 계산 결과 업데이트 - orderId: {}, departureDeadline: {}, estimatedDelivery: {}",
+                this.id.getValue(),
+                aiCalculationResult.getCalculatedDepartureDeadline(),
+                aiCalculationResult.getEstimatedDeliveryTime());
+    }
+
+    /**
      * 배송 정보 업데이트
      */
     public void updateDeliveryInfo(DeliveryInfo deliveryInfo) {
