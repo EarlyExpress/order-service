@@ -94,4 +94,6 @@ public interface OrderSagaRepository {
      * @return Saga 목록
      */
     List<OrderSaga> findCompletedSagasOlderThan(LocalDateTime date);
+
+    public void deleteAll();
 }
