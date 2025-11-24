@@ -2,11 +2,15 @@ package com.early_express.order_service.domain.order.application.service;
 
 import com.early_express.order_service.domain.order.domain.exception.OrderErrorCode;
 import com.early_express.order_service.domain.order.domain.exception.SagaException;
+import com.early_express.order_service.domain.order.domain.messaging.notification.NotificationEventPublisher;
+import com.early_express.order_service.domain.order.domain.messaging.notification.NotificationRequestedEventData;
 import com.early_express.order_service.domain.order.domain.messaging.order.OrderEventPublisher;
 import com.early_express.order_service.domain.order.domain.messaging.order.OrderPaymentVerifiedEventData;
 import com.early_express.order_service.domain.order.domain.messaging.order.event.OrderPaymentVerifiedEvent;
 import com.early_express.order_service.domain.order.domain.messaging.payment.PaymentEventPublisher;
 import com.early_express.order_service.domain.order.domain.messaging.payment.RefundRequestedEventData;
+import com.early_express.order_service.domain.order.domain.messaging.tracking.TrackingEventPublisher;
+import com.early_express.order_service.domain.order.domain.messaging.tracking.TrackingStartRequestedEventData;
 import com.early_express.order_service.domain.order.domain.model.Order;
 import com.early_express.order_service.domain.order.domain.model.OrderSaga;
 import com.early_express.order_service.domain.order.domain.model.SagaStep;
@@ -35,9 +39,11 @@ import com.early_express.order_service.domain.order.infrastructure.client.lastmi
 import com.early_express.order_service.domain.order.infrastructure.client.payment.PaymentClient;
 import com.early_express.order_service.domain.order.infrastructure.client.payment.dto.PaymentVerificationRequest;
 import com.early_express.order_service.domain.order.infrastructure.client.payment.dto.PaymentVerificationResponse;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -55,16 +61,20 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class OrderSagaOrchestratorService {
 
+    private final OrderCompensationService compensationService;
     private final OrderRepository orderRepository;
     private final OrderSagaRepository sagaRepository;
     private final PaymentEventPublisher paymentEventPublisher;
     private final OrderEventPublisher orderEventPublisher;
+    private final NotificationEventPublisher notificationEventPublisher;
+    private final TrackingEventPublisher trackingEventPublisher;
     private final PaymentClient paymentClient;
     private final InventoryClient inventoryClient;
     private final HubClient hubClient;
     private final AiClient aiClient;
     private final HubDeliveryClient hubDeliveryClient;
     private final LastMileClient lastMileClient;
+    private final ObjectMapper objectMapper;
 
     /**
      * Order Saga 시작
@@ -78,44 +88,81 @@ public class OrderSagaOrchestratorService {
      *
      * @param order 생성된 주문
      */
-    @Transactional
+//    @Transactional
+//    public void startOrderSaga(Order order) {
+//        log.info("=== Order Saga 시작 - orderId: {} ===", order.getIdValue());
+//
+//        // 1. Saga 생성 및 시작
+//        OrderSaga save_saga = OrderSaga.create(order.getId());
+//        save_saga.start();
+//        OrderSaga saga=sagaRepository.save(save_saga);
+//
+//        try {
+//            // ========== [동기 처리] Step 1: 재고 예약 ==========
+//            saga = executeStockReservation(order, saga);
+//
+//            // ========== [동기 처리] Step 2: 결제 검증 ==========
+//            saga = executePaymentVerification(order, saga);
+//
+//            log.info("=== Order Saga 동기 단계 완료 - orderId: {} ===", order.getIdValue());
+//
+//            // ========== 이벤트 발행: 비동기 Step 3~7 트리거 ==========
+//            publishOrderPaymentVerifiedEvent(order, saga);
+//
+//            log.info("=== OrderPaymentVerified 이벤트 발행 완료 - orderId: {} ===",
+//                    order.getIdValue());
+//
+//            // ========== [비동기 처리] Step 3~7: 이벤트 발행 ==========
+//            // - RouteCalculationRequestedEvent 발행
+//            // - Step 3: 경로 계산 (Hub Service + AI Service)
+//            // - Step 4: 허브 배송 생성 (조건부)
+//            // - Step 5: 업체 배송 생성
+//            // - Step 6: 알림 발송 (Best Effort)
+//            // - Step 7: 추적 시작 (Best Effort)
+//
+//        } catch (Exception e) {
+//            log.error("Saga 실행 중 오류 발생 - orderId: {}, error: {}",
+//                    order.getIdValue(), e.getMessage(), e);
+//
+//            // 별도 서비스 호출 (새 트랜잭션)
+//            // Step 1 실패인지 Step 2 실패인지 구분
+//            if (saga.getCurrentStep() == SagaStep.STOCK_RESERVE) {
+//                // Step 1 실패: 재고 예약 실패
+//                compensationService.startCompensationForStockFailure(
+//                        order.getIdValue(),
+//                        e.getMessage()
+//                );
+//            } else {
+//                // Step 2 실패: 결제 검증 실패
+//                compensationService.startCompensationForPaymentFailure(
+//                        order.getIdValue(),
+//                        e.getMessage()
+//                );
+//            }
+//
+//            throw new SagaException(
+//                    OrderErrorCode.SAGA_EXECUTION_FAILED,
+//                    "주문 생성 중 오류가 발생했습니다.",
+//                    e
+//            );
+//        }
+//    }
+    /**
+     * 진입점 - 트랜잭션 없음
+     */
     public void startOrderSaga(Order order) {
         log.info("=== Order Saga 시작 - orderId: {} ===", order.getIdValue());
 
-        // 1. Saga 생성 및 시작
-        OrderSaga saga = OrderSaga.create(order.getId());
-        saga.start();
-        sagaRepository.save(saga);
-
         try {
-            // ========== [동기 처리] Step 1: 재고 예약 ==========
-            executeStockReservation(order, saga);
-
-            // ========== [동기 처리] Step 2: 결제 검증 ==========
-            executePaymentVerification(order, saga);
-
-            log.info("=== Order Saga 동기 단계 완료 - orderId: {} ===", order.getIdValue());
-
-            // ========== 이벤트 발행: 비동기 Step 3~7 트리거 ==========
-            publishOrderPaymentVerifiedEvent(order, saga);
-
-            log.info("=== OrderPaymentVerified 이벤트 발행 완료 - orderId: {} ===",
-                    order.getIdValue());
-
-            // ========== [비동기 처리] Step 3~7: 이벤트 발행 ==========
-            // - RouteCalculationRequestedEvent 발행
-            // - Step 3: 경로 계산 (Hub Service + AI Service)
-            // - Step 4: 허브 배송 생성 (조건부)
-            // - Step 5: 업체 배송 생성
-            // - Step 6: 알림 발송 (Best Effort)
-            // - Step 7: 추적 시작 (Best Effort)
+            // 그냥 호출! (외부에서 호출되므로 프록시 통과)
+            executeOrderSagaWithTransaction(order);
 
         } catch (Exception e) {
             log.error("Saga 실행 중 오류 발생 - orderId: {}, error: {}",
                     order.getIdValue(), e.getMessage(), e);
 
-            // 보상 트랜잭션 시작
-            startCompensation(order, saga, e.getMessage());
+            // 트랜잭션 밖에서 보상 처리
+            handleSagaFailure(order, e);
 
             throw new SagaException(
                     OrderErrorCode.SAGA_EXECUTION_FAILED,
@@ -126,9 +173,64 @@ public class OrderSagaOrchestratorService {
     }
 
     /**
+     * Saga 실행 - 트랜잭션 관리
+     */
+    @Transactional
+    public void executeOrderSagaWithTransaction(Order order) {
+        // Saga 생성 및 Step 실행
+        OrderSaga save_saga = OrderSaga.create(order.getId());
+        save_saga.start();
+        OrderSaga saga = sagaRepository.save(save_saga);
+
+        // ========== [동기 처리] Step 1: 재고 예약 ==========
+        saga = executeStockReservation(order, saga);
+
+        // ========== [동기 처리] Step 2: 결제 검증 ==========
+        saga = executePaymentVerification(order, saga);
+
+        // ========== 이벤트 발행: 비동기 Step 3~7 트리거 ==========
+        publishOrderPaymentVerifiedEvent(order, saga);
+
+        // ========== [비동기 처리] Step 3~7: 이벤트 발행 ==========
+        // - RouteCalculationRequestedEvent 발행
+        // - Step 3: 경로 계산 (Hub Service + AI Service)
+        // - Step 4: 허브 배송 생성 (조건부)
+        // - Step 5: 업체 배송 생성
+        // - Step 6: 알림 발송 (Best Effort)
+        // - Step 7: 추적 시작 (Best Effort)
+    }
+
+    /**
+     * 보상 처리 - 트랜잭션 밖
+     */
+    private void handleSagaFailure(Order order, Exception e) {
+        try {
+            OrderSaga saga = sagaRepository.findByOrderId(order.getId())
+                    .orElse(null);
+
+            if (saga == null) {
+                log.warn("Saga가 롤백되어 없음, 보상 불필요 - orderId: {}",
+                        order.getIdValue());
+                return;
+            }
+
+            if (saga.getCurrentStep() == SagaStep.STOCK_RESERVE) {
+                compensationService.startCompensationForStockFailure(
+                        order.getIdValue(), e.getMessage());
+            } else {
+                compensationService.startCompensationForPaymentFailure(
+                        order.getIdValue(), e.getMessage());
+            }
+        } catch (Exception compensationError) {
+            log.error("보상 처리 중 오류 - orderId: {}",
+                    order.getIdValue(), compensationError);
+        }
+    }
+
+    /**
      * Step 1: 재고 예약
      */
-    private void executeStockReservation(Order order, OrderSaga saga) {
+    private OrderSaga executeStockReservation(Order order, OrderSaga saga) {
         log.info(">>> Step 1: 재고 예약 시작 - orderId: {}", order.getIdValue());
 
         order.startStockChecking();
@@ -158,10 +260,11 @@ public class OrderSagaOrchestratorService {
             orderRepository.save(order);
 
             saga.completeStep(SagaStep.STOCK_RESERVE, response);
-            sagaRepository.save(saga);
+            saga =sagaRepository.save(saga);
 
             log.info(">>> Step 1: 재고 예약 완료 - orderId: {}", order.getIdValue());
 
+            return saga;
         } catch (Exception e) {
             saga.failStep(SagaStep.STOCK_RESERVE, e.getMessage());
             sagaRepository.save(saga);
@@ -172,7 +275,7 @@ public class OrderSagaOrchestratorService {
     /**
      * Step 2: 결제 검증
      */
-    private void executePaymentVerification(Order order, OrderSaga saga) {
+    private OrderSaga executePaymentVerification(Order order, OrderSaga saga) {
         log.info(">>> Step 2: 결제 검증 시작 - orderId: {}", order.getIdValue());
 
         order.startPaymentVerification();
@@ -210,10 +313,10 @@ public class OrderSagaOrchestratorService {
             orderRepository.save(order);
 
             saga.completeStep(SagaStep.PAYMENT_VERIFY, response);
-            sagaRepository.save(saga);
+            saga = sagaRepository.save(saga);
 
             log.info(">>> Step 2: 결제 검증 완료 - orderId: {}", order.getIdValue());
-
+            return saga;
         } catch (Exception e) {
             saga.failStep(SagaStep.PAYMENT_VERIFY, e.getMessage());
             sagaRepository.save(saga);
@@ -239,10 +342,115 @@ public class OrderSagaOrchestratorService {
      * Step 3: 경로 계산 (이벤트 기반)
      * OrderPaymentVerifiedEvent 수신 후 호출
      */
-    @Transactional
+//    @Transactional
+//    public void executeRouteCalculation(OrderPaymentVerifiedEvent event) {
+//        log.info(">>> Step 3: 경로 계산 시작 - orderId: {}", event.getOrderId());
+//
+//        // 1. Order 및 Saga 조회
+//        Order order = orderRepository.findById(OrderId.from(event.getOrderId()))
+//                .orElseThrow(() -> new SagaException(
+//                        OrderErrorCode.ORDER_NOT_FOUND,
+//                        "주문을 찾을 수 없습니다: " + event.getOrderId()
+//                ));
+//
+//        OrderSaga saga = sagaRepository.findByOrderId(order.getId())
+//                .orElseThrow(() -> new SagaException(
+//                        OrderErrorCode.SAGA_NOT_FOUND,
+//                        "Saga를 찾을 수 없습니다: " + event.getOrderId()
+//                ));
+//
+//        log.info("=== Step 3 시작: 경로 및 시간 계산 - orderId: {}, sagaId: {} ===",
+//                order.getIdValue(), saga.getSagaIdValue());
+//
+//        // 2. Saga Step 시작
+//        saga.startStep(SagaStep.ROUTE_CALCULATE);
+//        order.startRouteCalculation(); // Order 상태: ROUTE_CALCULATING
+//        sagaRepository.save(saga);
+//        orderRepository.save(order);
+//
+//        try {
+//            // 3. Hub Service 경로 계산
+//            HubRouteCalculationResponse hubResponse = callHubRouteCalculation(order);
+//            log.info("Hub 경로 계산 완료 - orderId: {}, originHub: {}, destinationHub: {}, hubs: {}",
+//                    order.getIdValue(),
+//                    hubResponse.getOriginHubId(),
+//                    hubResponse.getDestinationHubId(),
+//                    hubResponse.getRouteHubs());
+//
+//            // 4. Order 도메인 - Hub 정보 업데이트
+//            updateOrderWithHubResponse(order, hubResponse);
+//            orderRepository.save(order);
+//
+//            // 5. AI Service 시간 계산
+//            AiTimeCalculationResponse aiResponse = callAiTimeCalculation(order, hubResponse);
+//            log.info("AI 시간 계산 완료 - orderId: {}, departureDeadline: {}, estimatedDelivery: {}",
+//                    order.getIdValue(),
+//                    aiResponse.getCalculatedDepartureDeadline(),
+//                    aiResponse.getEstimatedDeliveryTime());
+//
+//            // 6. Order 도메인 - AI 계산 결과 업데이트
+//            updateOrderWithAiResponse(order, aiResponse);
+//            orderRepository.save(order);
+//
+//            // 7. Step 완료 처리
+//            saga.completeStep(SagaStep.ROUTE_CALCULATE, hubResponse);
+//            saga.addStepHistory(SagaStep.ROUTE_CALCULATE, aiResponse); // AI 결과도 히스토리에
+//
+//            // Order 상태: ROUTE_CALCULATING → DELIVERY_CREATING (다음 Step 대기)
+//            order.startDeliveryCreation();
+//
+//            sagaRepository.save(saga);
+//            orderRepository.save(order);
+//
+//            log.info("<<< Step 3: 경로 및 시간 계산 완료 - orderId: {}, requiresHubDelivery: {}, orderStatus: {}",
+//                    event.getOrderId(),
+//                    hubResponse.getRequiresHubDelivery(),
+//                    order.getStatus().getDescription());
+//
+//            // 8. 다음 Step 결정 및 트리거
+//            triggerNextStep(order, saga, hubResponse);
+//
+//        } catch (Exception e) {
+//            log.error("Step 3: 경로 계산 실패 - orderId: {}, error: {}",
+//                    event.getOrderId(), e.getMessage(), e);
+//
+//            saga.failStep(SagaStep.ROUTE_CALCULATE, e.getMessage());
+//            order.fail(); // Order 상태: ROUTE_CALCULATING → FAILED
+//            sagaRepository.save(saga);
+//            orderRepository.save(order);
+//
+//            // 보상 트랜잭션 시작!
+//            startCompensation(order, saga, e.getMessage());
+//
+//            throw e;
+//        }
+//    }
+    /**
+     * Step 3: 경로 계산 - 진입점 (트랜잭션 없음)
+     * OrderPaymentVerifiedEvent 수신 후 호출
+     */
     public void executeRouteCalculation(OrderPaymentVerifiedEvent event) {
         log.info(">>> Step 3: 경로 계산 시작 - orderId: {}", event.getOrderId());
 
+        try {
+            executeRouteCalculationWithTransaction(event);
+
+        } catch (Exception e) {
+            log.error("Step 3: 경로 계산 실패 - orderId: {}, error: {}",
+                    event.getOrderId(), e.getMessage(), e);
+
+            // 트랜잭션 밖에서 보상 처리
+            handleRouteCalculationFailure(event.getOrderId(), e);
+
+            throw e;
+        }
+    }
+
+    /**
+     * Step 3: 경로 계산 - 트랜잭션 관리
+     */
+    @Transactional
+    public void executeRouteCalculationWithTransaction(OrderPaymentVerifiedEvent event) {
         // 1. Order 및 Saga 조회
         Order order = orderRepository.findById(OrderId.from(event.getOrderId()))
                 .orElseThrow(() -> new SagaException(
@@ -261,63 +469,90 @@ public class OrderSagaOrchestratorService {
 
         // 2. Saga Step 시작
         saga.startStep(SagaStep.ROUTE_CALCULATE);
-        order.startRouteCalculation(); // Order 상태: ROUTE_CALCULATING
+        order.startRouteCalculation();
         sagaRepository.save(saga);
         orderRepository.save(order);
 
+        // 3. Hub Service 경로 계산
+        HubRouteCalculationResponse hubResponse = callHubRouteCalculation(order);
+        log.info("Hub 경로 계산 완료 - orderId: {}, originHub: {}, destinationHub: {}, hubs: {}",
+                order.getIdValue(),
+                hubResponse.getOriginHubId(),
+                hubResponse.getDestinationHubId(),
+                hubResponse.getRouteHubs());
+
+        // 4. Order 도메인 - Hub 정보 업데이트
+        updateOrderWithHubResponse(order, hubResponse);
+        orderRepository.save(order);
+
+        // 5. AI Service 시간 계산
+        AiTimeCalculationResponse aiResponse = callAiTimeCalculation(order, hubResponse);
+        log.info("AI 시간 계산 완료 - orderId: {}, departureDeadline: {}, estimatedDelivery: {}",
+                order.getIdValue(),
+                aiResponse.getCalculatedDepartureDeadline(),
+                aiResponse.getEstimatedDeliveryTime());
+
+        // 6. Order 도메인 - AI 계산 결과 업데이트
+        updateOrderWithAiResponse(order, aiResponse);
+        orderRepository.save(order);
+
+        // 7. Step 완료 처리
+        saga.completeStep(SagaStep.ROUTE_CALCULATE, hubResponse);
+        saga.addStepHistory(SagaStep.ROUTE_CALCULATE, aiResponse);
+
+        order.startDeliveryCreation();
+
+        sagaRepository.save(saga);
+        orderRepository.save(order);
+
+        log.info("<<< Step 3: 경로 및 시간 계산 완료 - orderId: {}, requiresHubDelivery: {}, orderStatus: {}",
+                event.getOrderId(),
+                hubResponse.getRequiresHubDelivery(),
+                order.getStatus().getDescription());
+
+        // 8. 다음 Step 결정 및 트리거
+        triggerNextStep(order, saga, hubResponse);
+    }
+
+    /**
+     * Step 3 실패 시 보상 처리 - 트랜잭션 밖
+     */
+    private void handleRouteCalculationFailure(String orderId, Exception e) {
         try {
-            // 3. Hub Service 경로 계산
-            HubRouteCalculationResponse hubResponse = callHubRouteCalculation(order);
-            log.info("Hub 경로 계산 완료 - orderId: {}, originHub: {}, destinationHub: {}, hubs: {}",
-                    order.getIdValue(),
-                    hubResponse.getOriginHubId(),
-                    hubResponse.getDestinationHubId(),
-                    hubResponse.getRouteHubs());
+            Order order = orderRepository.findById(OrderId.from(orderId))
+                    .orElse(null);
+            OrderSaga saga = sagaRepository.findByOrderId(OrderId.from(orderId))
+                    .orElse(null);
 
-            // 4. Order 도메인 - Hub 정보 업데이트
-            updateOrderWithHubResponse(order, hubResponse);
-            orderRepository.save(order);
+            if (saga == null) {
+                log.warn("Saga를 찾을 수 없음, 보상 불필요 - orderId: {}", orderId);
+                return;
+            }
 
-            // 5. AI Service 시간 계산
-            AiTimeCalculationResponse aiResponse = callAiTimeCalculation(order, hubResponse);
-            log.info("AI 시간 계산 완료 - orderId: {}, departureDeadline: {}, estimatedDelivery: {}",
-                    order.getIdValue(),
-                    aiResponse.getCalculatedDepartureDeadline(),
-                    aiResponse.getEstimatedDeliveryTime());
+            // Step 실패 처리 (별도 트랜잭션)
+            markStepAsFailed(orderId, e.getMessage());
 
-            // 6. Order 도메인 - AI 계산 결과 업데이트
-            updateOrderWithAiResponse(order, aiResponse);
-            orderRepository.save(order);
+            // 보상 트랜잭션 시작 (별도 트랜잭션)
+            compensationService.startCompensationForRouteFailure(orderId, e.getMessage());
 
-            // 7. Step 완료 처리
-            saga.completeStep(SagaStep.ROUTE_CALCULATE, hubResponse);
-            saga.addStepHistory(SagaStep.ROUTE_CALCULATE, aiResponse); // AI 결과도 히스토리에
-
-            // Order 상태: ROUTE_CALCULATING → DELIVERY_CREATING (다음 Step 대기)
-            order.startDeliveryCreation();
-
-            sagaRepository.save(saga);
-            orderRepository.save(order);
-
-            log.info("<<< Step 3: 경로 및 시간 계산 완료 - orderId: {}, requiresHubDelivery: {}, orderStatus: {}",
-                    event.getOrderId(),
-                    hubResponse.getRequiresHubDelivery(),
-                    order.getStatus().getDescription());
-
-            // 8. 다음 Step 결정 및 트리거
-            triggerNextStep(order, saga, hubResponse);
-
-        } catch (Exception e) {
-            log.error("Step 3: 경로 계산 실패 - orderId: {}, error: {}",
-                    event.getOrderId(), e.getMessage(), e);
-
-            saga.failStep(SagaStep.ROUTE_CALCULATE, e.getMessage());
-            order.fail(); // Order 상태: ROUTE_CALCULATING → FAILED
-            sagaRepository.save(saga);
-            orderRepository.save(order);
-
-            throw e;
+        } catch (Exception compensationError) {
+            log.error("보상 처리 중 오류 - orderId: {}", orderId, compensationError);
         }
+    }
+
+    /**
+     * Step 실패 상태 업데이트 - 별도 트랜잭션
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void markStepAsFailed(String orderId, String errorMessage) {
+        Order order = orderRepository.findById(OrderId.from(orderId)).orElseThrow();
+        OrderSaga saga = sagaRepository.findByOrderId(order.getId()).orElseThrow();
+
+        saga.failStep(SagaStep.ROUTE_CALCULATE, errorMessage);
+        order.fail();
+
+        sagaRepository.save(saga);
+        orderRepository.save(order);
     }
 
     /**
@@ -520,11 +755,82 @@ public class OrderSagaOrchestratorService {
         log.info("=== Order Saga 완료 - orderId: {}, orderStatus: {} ===",
                 order.getIdValue(), order.getStatus().getDescription());
 
-        // 3. TODO: Step 6 (알림) 이벤트 발행 - Best Effort
-        // publishNotificationEvent(order);
+        // 3. Step 6 (알림) 이벤트 발행 - Best Effort
+        publishNotificationEvent(order);
 
-        // 4. TODO: Step 7 (추적 시작) 이벤트 발행 - Best Effort
-        // publishTrackingStartEvent(order);
+        // 4. Step 7 (추적 시작) 이벤트 발행 - Best Effort
+        publishTrackingStartEvent(order);
+    }
+
+    /**
+     * Step 6: 알림 발송 요청 이벤트 발행
+     * Best Effort - 실패해도 주문 처리는 계속 진행
+     */
+    private void publishNotificationEvent(Order order) {
+        log.info(">>> Step 6: 알림 발송 이벤트 발행 시작 - orderId: {}", order.getIdValue());
+
+        try {
+            // 1. 알림 발송 요청 이벤트 데이터 생성
+            NotificationRequestedEventData eventData = NotificationRequestedEventData.of(
+                    order.getIdValue(),
+                    order.getReceiverInfo().getReceiverName(),
+                    order.getReceiverInfo().getReceiverPhone(),
+                    order.getReceiverInfo().getReceiverEmail(),
+                    order.getOrderNumber().getValue(),
+                    order.getAiCalculationResult().getEstimatedDeliveryTime(),
+                    order.getReceiverInfo().getDeliveryAddress()
+            );
+
+            // 2. 알림 발송 요청 이벤트 발행
+            notificationEventPublisher.publishNotificationRequested(eventData);
+
+            log.info(">>> Step 6: 알림 발송 이벤트 발행 완료 - orderId: {}, receiverName: {}, receiverEmail: {}",
+                    order.getIdValue(),
+                    order.getReceiverInfo().getReceiverName(),
+                    order.getReceiverInfo().getReceiverEmail());
+
+        } catch (Exception e) {
+            // Best Effort: 알림 실패해도 주문 처리는 계속 진행
+            log.error("Step 6: 알림 발송 이벤트 발행 실패 (Best Effort, 주문 처리 계속) - orderId: {}, error: {}",
+                    order.getIdValue(), e.getMessage(), e);
+        }
+    }
+
+    // ==================== Step 7: 추적 시작 (Best Effort) ====================
+
+    /**
+     * Step 7: 추적 시작 요청 이벤트 발행
+     * Best Effort - 실패해도 주문 처리는 계속 진행
+     */
+    private void publishTrackingStartEvent(Order order) {
+        log.info(">>> Step 7: 추적 시작 이벤트 발행 시작 - orderId: {}", order.getIdValue());
+
+        try {
+            // 1. 추적 시작 요청 이벤트 데이터 생성
+            TrackingStartRequestedEventData eventData = TrackingStartRequestedEventData.of(
+                    order.getIdValue(),
+                    order.getOrderNumber().getValue(),
+                    order.getDeliveryInfo().getHubDeliveryId(),
+                    order.getDeliveryInfo().getLastMileDeliveryId(),
+                    order.getProductInfo().getProductHubId(),
+                    order.getDestinationHubId(),
+                    order.getDeliveryInfo().getRequiresHubDelivery(),
+                    order.getAiCalculationResult().getEstimatedDeliveryTime()
+            );
+
+            // 2. 추적 시작 요청 이벤트 발행
+            trackingEventPublisher.publishTrackingStartRequested(eventData);
+
+            log.info(">>> Step 7: 추적 시작 이벤트 발행 완료 - orderId: {}, hubDeliveryId: {}, lastMileDeliveryId: {}",
+                    order.getIdValue(),
+                    order.getDeliveryInfo().getHubDeliveryId(),
+                    order.getDeliveryInfo().getLastMileDeliveryId());
+
+        } catch (Exception e) {
+            // Best Effort: 추적 시작 실패해도 주문 처리는 계속 진행
+            log.error("Step 7: 추적 시작 이벤트 발행 실패 (Best Effort, 주문 처리 계속) - orderId: {}, error: {}",
+                    order.getIdValue(), e.getMessage(), e);
+        }
     }
 
     // ==================== Request Builder 메서드 ====================
@@ -685,8 +991,9 @@ public class OrderSagaOrchestratorService {
 
     /**
      * 보상 트랜잭션 시작
+     * REQUIRES_NEW: 호출자 트랜잭션과 독립적으로 실행
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void startCompensation(Order order, OrderSaga saga, String failureReason) {
         log.warn("보상 트랜잭션 시작 - orderId: {}, reason: {}",
                 order.getIdValue(), failureReason);
@@ -728,46 +1035,55 @@ public class OrderSagaOrchestratorService {
      *
      * 주의: PAYMENT_CANCEL은 이벤트만 발행하고 완료 처리는 Consumer에서 수행
      */
-    private void executeCompensationStep(Order order, OrderSaga saga, SagaStep originalStep) {
+    private OrderSaga executeCompensationStep(Order order, OrderSaga saga, SagaStep originalStep) {
         SagaStep compensationStep = originalStep.getCompensationStep();
 
         log.info(">>> 보상 Step 실행 - originalStep: {}, compensationStep: {}",
                 originalStep.getDescription(), compensationStep.getDescription());
 
         saga.executeCompensation(originalStep, compensationStep);
-        sagaRepository.save(saga);
+        saga = sagaRepository.save(saga);
+        try {
+            switch (compensationStep) {
+                case PAYMENT_CANCEL -> {
+                    // 이벤트만 발행, 완료 처리는 Consumer에서
+                    compensatePayment(order, saga);
+                    log.info(">>> 결제 취소 이벤트 발행 완료, PaymentRefundedEvent 대기 중");
+                    // 여기서 완료 처리하지 않음! Consumer가 처리함
+                    return saga;
+                }
+                case STOCK_RESTORE -> {
+                    // 동기 실행 후 즉시 완료 처리
+                    compensationService.compensateStock(order, saga);  // ← CompensationService 사용
+                }
+                case HUB_DELIVERY_CANCEL -> {
+                    // 동기 실행 후 즉시 완료 처리
+                    compensateHubDelivery(order, saga);
+                }
+                case LAST_MILE_DELIVERY_CANCEL -> {
+                    // 동기 실행 후 즉시 완료 처리
+                    compensateLastMileDelivery(order, saga);
+                }
+                default -> throw new IllegalStateException(
+                        "지원하지 않는 보상 Step: " + compensationStep
+                );
+            }
 
-        switch (compensationStep) {
-            case PAYMENT_CANCEL -> {
-                // 이벤트만 발행, 완료 처리는 Consumer에서
-                compensatePayment(order, saga);
-                log.info(">>> 결제 취소 이벤트 발행 완료, PaymentRefundedEvent 대기 중");
-                // 여기서 완료 처리하지 않음! Consumer가 처리함
-                return;
-            }
-            case STOCK_RESTORE -> {
-                // 동기 실행 후 즉시 완료 처리
-                compensateStock(order, saga);
-            }
-            case HUB_DELIVERY_CANCEL -> {
-                // 동기 실행 후 즉시 완료 처리
-                compensateHubDelivery(order, saga);
-            }
-            case LAST_MILE_DELIVERY_CANCEL -> {
-                // 동기 실행 후 즉시 완료 처리
-                compensateLastMileDelivery(order, saga);
-            }
-            default -> throw new IllegalStateException(
-                    "지원하지 않는 보상 Step: " + compensationStep
-            );
+            // PAYMENT_CANCEL 제외하고 여기서 완료 처리
+            saga = sagaRepository.findById(saga.getSagaId()).orElseThrow();
+            saga.completeCompensation(compensationStep);
+            saga = sagaRepository.save(saga);
+
+            log.info(">>> 보상 Step 완료 - compensationStep: {}",
+                    compensationStep.getDescription());
+
+        } catch (Exception e) {
+            saga = sagaRepository.findById(saga.getSagaId()).orElseThrow();
+            saga.failCompensation(compensationStep, e.getMessage());
+            saga = sagaRepository.save(saga);
+            throw e;
         }
-
-        // PAYMENT_CANCEL 제외하고 여기서 완료 처리
-        saga.completeCompensation(compensationStep);
-        sagaRepository.save(saga);
-
-        log.info(">>> 보상 Step 완료 - compensationStep: {}",
-                compensationStep.getDescription());
+        return saga;
     }
 
     /**
@@ -780,7 +1096,14 @@ public class OrderSagaOrchestratorService {
         try {
             // 1. 보상 데이터 조회
             Object stepData = saga.getCompensationDataForStep(SagaStep.PAYMENT_VERIFY);
-            PaymentVerificationResponse verifyResponse = (PaymentVerificationResponse) stepData;
+
+            // LinkedHashMap → PaymentVerificationResponse 변환
+            PaymentVerificationResponse verifyResponse;
+            if (stepData instanceof PaymentVerificationResponse) {
+                verifyResponse = (PaymentVerificationResponse) stepData;
+            } else {
+                verifyResponse = objectMapper.convertValue(stepData, PaymentVerificationResponse.class);
+            }
 
             // 2. 환불 요청 이벤트 데이터 생성
             RefundRequestedEventData eventData = RefundRequestedEventData.of(
