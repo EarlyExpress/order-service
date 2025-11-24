@@ -90,7 +90,7 @@ public class SagaStepHistoryEntity {
     public static SagaStepHistoryEntity fromDomain(SagaStepHistory history) {
         return SagaStepHistoryEntity.builder()
                 .id(history.getId())
-//                .sagaIdValue(history.getSagaIdValue())
+                .sagaIdValue(history.getSagaIdValue())
                 .step(history.getStep())
                 .status(history.getStatus())
                 .request(history.getRequest())
