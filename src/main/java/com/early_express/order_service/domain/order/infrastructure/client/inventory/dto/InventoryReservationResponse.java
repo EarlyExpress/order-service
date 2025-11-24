@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 재고 예약 응답 DTO
@@ -112,6 +113,7 @@ public class InventoryReservationResponse {
         return reservedItems.stream()
                 .map(ReservedItem::getHubId)
                 .distinct()
-                .toList();
+//                .toList();    //json변환을 위해 컬렉션 추가
+                .collect(Collectors.toList());
     }
 }
