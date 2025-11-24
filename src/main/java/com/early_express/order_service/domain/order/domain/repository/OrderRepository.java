@@ -86,6 +86,34 @@ public interface OrderRepository {
             Pageable pageable);
 
     /**
+     * 허브별 주문 목록 조회 (페이징)
+     * - 공급 허브, 수령 허브, 도착 허브 중 하나라도 해당되면 조회
+     *
+     * @param hubId 허브 ID
+     * @param pageable 페이징 정보
+     * @return 주문 목록 (페이징)
+     */
+    Page<Order> findByHubId(String hubId, Pageable pageable);
+
+    /**
+     * 허브별 주문 검색 (동적 쿼리 + 페이징)
+     * - 상태 필터링 포함
+     *
+     * @param hubId 허브 ID
+     * @param status 주문 상태 (nullable)
+     * @param startDate 시작일 (nullable)
+     * @param endDate 종료일 (nullable)
+     * @param pageable 페이징 정보
+     * @return 주문 목록 (페이징)
+     */
+    Page<Order> searchOrdersByHubId(
+            String hubId,
+            OrderStatus status,
+            LocalDateTime startDate,
+            LocalDateTime endDate,
+            Pageable pageable);
+
+    /**
      * 발송 시한 임박 주문 조회
      *
      * @param hours 몇 시간 내
@@ -126,4 +154,6 @@ public interface OrderRepository {
             LocalDateTime startDate,
             LocalDateTime endDate,
             Pageable pageable);
+
+    public void deleteAll();
 }
