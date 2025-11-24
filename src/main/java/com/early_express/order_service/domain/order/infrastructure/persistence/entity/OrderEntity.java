@@ -373,33 +373,40 @@ public class OrderEntity extends BaseEntity {
 
     /**
      * 도메인 모델로 엔티티 업데이트
-     * Order 도메인의 모든 상태를 엔티티에 반영
-     */
+     * */
     public void updateFromDomain(Order order) {
-        // ===== ID 및 주문 번호 =====
-        this.id = order.getId().getValue();
-        this.orderNumber = order.getOrderNumberValue();
+        // ID 일치 검증
+        if (!this.id.equals(order.getId().getValue())) {
+            throw new IllegalStateException(
+                    "엔티티 ID와 도메인 ID가 일치하지 않습니다. " +
+                            "Entity ID: " + this.id + ", Domain ID: " + order.getId().getValue()
+            );
+        }
 
-        // ===== 업체 정보 =====
-        this.supplierCompanyId = order.getCompanyInfo().getSupplierCompanyId();
-        this.supplierHubId = order.getCompanyInfo().getSupplierHubId();
-        this.receiverCompanyId = order.getCompanyInfo().getReceiverCompanyId();
-        this.receiverHubId = order.getCompanyInfo().getReceiverHubId();
+        // ===== 불변 필드는 제외 =====
+        // this.id (PK - 불변)
+        // this.orderNumber (비즈니스 키 - 불변)
+        // this.supplierCompanyId (주문 생성 시 결정 - 불변)
+        // this.supplierHubId (주문 생성 시 결정 - 불변)
+        // this.receiverCompanyId (주문 생성 시 결정 - 불변)
+        // this.receiverHubId (주문 생성 시 결정 - 불변)
+        // this.productId (주문 생성 시 결정 - 불변)
 
-        // ===== 도착 허브 ID =====
+        // ===== 가변 필드만 업데이트 =====
+
+        // 도착 허브 ID (Hub Service가 결정)
         this.destinationHubId = order.getDestinationHubId();
 
-        // ===== 상품 정보 =====
-        this.productId = order.getProductInfo().getProductId();
+        // 상품 정보 (일부 가변)
         this.productHubId = order.getProductInfo().getProductHubId();
         this.quantity = order.getProductInfo().getQuantity();
 
-        // ===== 배송 정보 =====
+        // 배송 정보
         this.requiresHubDelivery = order.getDeliveryInfo().getRequiresHubDelivery();
         this.hubDeliveryId = order.getDeliveryInfo().getHubDeliveryId();
         this.lastMileDeliveryId = order.getDeliveryInfo().getLastMileDeliveryId();
 
-        // ===== 수령자 정보 =====
+        // 수령자 정보 (주문 수정 가능한 경우)
         this.receiverName = order.getReceiverInfo().getReceiverName();
         this.receiverPhone = order.getReceiverInfo().getReceiverPhone();
         this.receiverEmail = order.getReceiverInfo().getReceiverEmail();
@@ -408,30 +415,30 @@ public class OrderEntity extends BaseEntity {
         this.deliveryPostalCode = order.getReceiverInfo().getDeliveryPostalCode();
         this.deliveryNote = order.getReceiverInfo().getDeliveryNote();
 
-        // ===== 요청사항 =====
+        // 요청사항
         this.requestedDeliveryDate = order.getRequestInfo().getRequestedDeliveryDate();
         this.requestedDeliveryTime = order.getRequestInfo().getRequestedDeliveryTime();
         this.specialInstructions = order.getRequestInfo().getSpecialInstructions();
 
-        // ===== AI 계산 결과 =====
+        // AI 계산 결과
         this.calculatedDepartureDeadline = order.getAiCalculationResult().getCalculatedDepartureDeadline();
         this.estimatedDeliveryTime = order.getAiCalculationResult().getEstimatedDeliveryTime();
         this.routeInfo = order.getAiCalculationResult().getRouteInfo();
 
-        // ===== 상태 =====
+        // 상태
         this.status = order.getStatus();
 
-        // ===== 금액 정보 =====
+        // 금액 정보
         this.unitPrice = order.getAmountInfo().getUnitPrice();
         this.totalAmount = order.getAmountInfo().getTotalAmount();
         this.paymentId = order.getAmountInfo().getPaymentId();
 
-        // ===== PG 결제 정보 =====
+        // PG 결제 정보
         this.pgProvider = order.getPgPaymentInfo().getPgProvider();
         this.pgPaymentId = order.getPgPaymentInfo().getPgPaymentId();
         this.pgPaymentKey = order.getPgPaymentInfo().getPgPaymentKey();
 
-        // ===== 배송 진행 정보 =====
+        // 배송 진행 정보
         this.actualDepartureTime = order.getDeliveryProgressInfo().getActualDepartureTime();
         this.hubArrivalTime = order.getDeliveryProgressInfo().getHubArrivalTime();
         this.finalDeliveryStartTime = order.getDeliveryProgressInfo().getFinalDeliveryStartTime();
@@ -439,7 +446,7 @@ public class OrderEntity extends BaseEntity {
         this.signature = order.getDeliveryProgressInfo().getSignature();
         this.actualReceiverName = order.getDeliveryProgressInfo().getActualReceiverName();
 
-        // ===== 취소 정보 =====
+        // 취소 정보
         this.cancelReason = order.getCancelReason();
         this.cancelledAt = order.getCancelledAt();
     }
