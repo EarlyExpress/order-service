@@ -141,6 +141,7 @@ public class OrderSagaEntity {
         this.stepHistory.clear();
         saga.getStepHistory().forEach(history -> {
             SagaStepHistoryEntity historyEntity = SagaStepHistoryEntity.fromDomain(history);
+            historyEntity.setSagaIdValue(this.sagaId);
             this.addStepHistory(historyEntity);
         });
     }
