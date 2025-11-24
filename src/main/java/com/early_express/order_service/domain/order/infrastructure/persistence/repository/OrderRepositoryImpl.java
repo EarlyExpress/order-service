@@ -1,5 +1,7 @@
 package com.early_express.order_service.domain.order.infrastructure.persistence.repository;
 
+import com.early_express.order_service.domain.order.domain.exception.OrderErrorCode;
+import com.early_express.order_service.domain.order.domain.exception.OrderException;
 import com.early_express.order_service.domain.order.domain.model.Order;
 import com.early_express.order_service.domain.order.domain.model.OrderStatus;
 import com.early_express.order_service.domain.order.domain.model.vo.OrderId;
@@ -15,6 +17,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -32,22 +35,52 @@ public class OrderRepositoryImpl implements OrderRepository {
     private final JPAQueryFactory queryFactory;
     private final QOrderEntity qOrder = QOrderEntity.orderEntity;
 
+//    @Override
+//    public Order save(Order order) {
+//        OrderEntity entity;
+//
+//        if (order.getId() != null) {
+//            entity = orderJpaRepository.findById(order.getIdValue())
+//                    .orElseThrow(() -> new IllegalArgumentException("Order not found: " + order.getIdValue()));
+//            entity.updateFromDomain(order);
+//        } else {
+//            entity = OrderEntity.fromDomain(order);
+//        }
+//
+//        OrderEntity savedEntity = orderJpaRepository.save(entity);
+//
+//        return savedEntity.toDomain();
+//    }
     @Override
+    @Transactional
     public Order save(Order order) {
         OrderEntity entity;
 
-        // ID가 있으면 기존 엔티티 조회 후 업데이트 (Dirty Checking)
         if (order.getId() != null) {
+            // 기존 주문 업데이트
             entity = orderJpaRepository.findById(order.getIdValue())
-                    .orElseThrow(() -> new IllegalArgumentException("Order not found: " + order.getIdValue()));
+                    .orElseThrow(() -> new OrderException(
+                            OrderErrorCode.ORDER_NOT_FOUND,
+                            "주문을 찾을 수 없습니다: " + order.getIdValue()
+                    ));
+
+            // 영속 상태 엔티티 업데이트 (변경 감지)
             entity.updateFromDomain(order);
+
+            // save() 호출은 선택적 (변경 감지로 자동 업데이트됨)
+            // 하지만 명시적으로 호출하는 것이 코드 의도를 명확히 함
         } else {
-            // ID가 없으면 새로 생성
+            // 신규 주문 생성
             entity = OrderEntity.fromDomain(order);
+            entity = orderJpaRepository.save(entity);
         }
 
-        OrderEntity savedEntity = orderJpaRepository.save(entity);
-        return savedEntity.toDomain();
+        return entity.toDomain();
+    }
+
+    @Override
+    public void deleteAll() {
+        orderJpaRepository.deleteAll();
     }
 
     @Override
@@ -176,6 +209,91 @@ public class OrderRepositoryImpl implements OrderRepository {
     }
 
     /**
+     * 허브별 주문 목록 조회 (페이징)
+     * - supplierHubId, receiverHubId, destinationHubId 중 하나라도 일치하면 조회
+     *
+     * @param hubId 허브 ID
+     * @param pageable 페이징 정보
+     * @return 주문 목록 (페이징)
+     */
+    @Override
+    public Page<Order> findByHubId(String hubId, Pageable pageable) {
+        List<OrderEntity> content = queryFactory
+                .selectFrom(qOrder)
+                .where(
+                        hubIdEq(hubId),
+                        qOrder.isDeleted.isFalse()
+                )
+                .offset(pageable.getOffset())
+                .limit(pageable.getPageSize())
+                .orderBy(qOrder.createdAt.desc())
+                .fetch();
+
+        long total = queryFactory
+                .selectFrom(qOrder)
+                .where(
+                        hubIdEq(hubId),
+                        qOrder.isDeleted.isFalse()
+                )
+                .fetchCount();
+
+        List<Order> orders = content.stream()
+                .map(OrderEntity::toDomain)
+                .toList();
+
+        return new PageImpl<>(orders, pageable, total);
+    }
+
+    /**
+     * 허브별 주문 검색 (동적 쿼리 + 페이징)
+     * - 상태, 날짜 필터링 포함
+     *
+     * @param hubId 허브 ID
+     * @param status 주문 상태 (nullable)
+     * @param startDate 시작일 (nullable)
+     * @param endDate 종료일 (nullable)
+     * @param pageable 페이징 정보
+     * @return 주문 목록 (페이징)
+     */
+    @Override
+    public Page<Order> searchOrdersByHubId(
+            String hubId,
+            OrderStatus status,
+            LocalDateTime startDate,
+            LocalDateTime endDate,
+            Pageable pageable) {
+
+        List<OrderEntity> content = queryFactory
+                .selectFrom(qOrder)
+                .where(
+                        hubIdEq(hubId),
+                        statusEq(status),
+                        createdAtBetween(startDate, endDate),
+                        qOrder.isDeleted.isFalse()
+                )
+                .offset(pageable.getOffset())
+                .limit(pageable.getPageSize())
+                .orderBy(qOrder.createdAt.desc())
+                .fetch();
+
+        long total = queryFactory
+                .selectFrom(qOrder)
+                .where(
+                        hubIdEq(hubId),
+                        statusEq(status),
+                        createdAtBetween(startDate, endDate),
+                        qOrder.isDeleted.isFalse()
+                )
+                .fetchCount();
+
+        List<Order> orders = content.stream()
+                .map(OrderEntity::toDomain)
+                .toList();
+
+        return new PageImpl<>(orders, pageable, total);
+    }
+
+    /**
      * 발송 시한 초과 주문 조회
      *
      * @return 주문 목록
@@ -250,6 +368,20 @@ public class OrderRepositoryImpl implements OrderRepository {
     }
 
     // ===== QueryDSL 조건 메서드 =====
+
+    /**
+     * 허브 ID 조건
+     * - supplierHubId, receiverHubId, destinationHubId 중 하나라도 일치
+     */
+    private BooleanExpression hubIdEq(String hubId) {
+        if (hubId == null) {
+            return null;
+        }
+        return qOrder.supplierHubId.eq(hubId)
+                .or(qOrder.receiverHubId.eq(hubId))
+                .or(qOrder.destinationHubId.eq(hubId));
+    }
+
 
     private BooleanExpression companyIdEq(String companyId) {
         if (companyId == null) {
