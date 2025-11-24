@@ -19,9 +19,11 @@ import com.early_express.order_service.domain.order.infrastructure.client.invent
 import com.early_express.order_service.domain.order.infrastructure.client.payment.dto.PaymentVerificationResponse;
 import com.early_express.order_service.domain.order.infrastructure.messaging.payment.event.PaymentRefundFailedEvent;
 import com.early_express.order_service.domain.order.infrastructure.messaging.payment.event.PaymentRefundedEvent;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -37,6 +39,7 @@ public class OrderCompensationService {
     private final OrderSagaRepository sagaRepository;
     private final InventoryClient inventoryClient;
     private final PaymentEventPublisher paymentEventPublisher;
+    private final ObjectMapper objectMapper;
 
     /**
      * 재고 부족으로 인한 보상 시작
@@ -46,7 +49,7 @@ public class OrderCompensationService {
      * @param orderId 주문 ID
      * @param failureReason 실패 사유
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void startCompensationForStockFailure(String orderId, String failureReason) {
         log.warn("!!! 재고 부족으로 보상 시작 - orderId: {}, reason: {}",
                 orderId, failureReason);
@@ -79,7 +82,7 @@ public class OrderCompensationService {
      * @param orderId 주문 ID
      * @param failureReason 실패 사유
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void startCompensationForPaymentFailure(String orderId, String failureReason) {
         log.warn("!!! 결제 검증 실패로 보상 시작 - orderId: {}, reason: {}",
                 orderId, failureReason);
@@ -92,17 +95,35 @@ public class OrderCompensationService {
         saga.startCompensation(failureReason);
         sagaRepository.save(saga);
 
-        // 3. 재고 복원 (동기)
-        compensateStock(order, saga);
+        // 3. STOCK_RESTORE 히스토리 생성 (중요!)
+        saga.executeCompensation(SagaStep.STOCK_RESERVE, SagaStep.STOCK_RESTORE);
+        saga = sagaRepository.save(saga);
 
-        // 4. 보상 완료
-        saga.completeAllCompensations();
-        sagaRepository.save(saga);
+        try {
+            // 4. 재고 복원 (동기)
+            compensateStock(order, saga);
 
-        order.compensate();
-        orderRepository.save(order);
+            // 5. 보상 완료
+            saga.completeCompensation(SagaStep.STOCK_RESTORE);
+            saga.completeAllCompensations();
+            saga = sagaRepository.save(saga);
 
-        log.warn("!!! 결제 검증 실패 보상 완료 - orderId: {}", orderId);
+            order.compensate();
+            orderRepository.save(order);
+
+            log.warn("!!! 결제 검증 실패 보상 완료 - orderId: {}", orderId);
+
+        } catch (Exception e) {
+            log.error("재고 복원 실패 - orderId: {}", orderId, e);
+
+            saga.failCompensation(SagaStep.STOCK_RESTORE, e.getMessage());
+            sagaRepository.save(saga);
+
+            order.fail();
+            orderRepository.save(order);
+
+            throw e;
+        }
     }
 
     /**
@@ -113,7 +134,7 @@ public class OrderCompensationService {
      *
      * @param event 환불 완료 이벤트
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void handlePaymentRefunded(PaymentRefundedEvent event) {
         log.info(">>> 환불 완료 이벤트 처리 시작 - orderId: {}, paymentId: {}",
                 event.getOrderId(), event.getPaymentId());
@@ -155,7 +176,7 @@ public class OrderCompensationService {
      *
      * @param event 환불 실패 이벤트
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void handlePaymentRefundFailed(PaymentRefundFailedEvent event) {
         log.error(">>> 환불 실패 이벤트 처리 - orderId: {}, paymentId: {}, error: {}",
                 event.getOrderId(), event.getPaymentId(), event.getErrorMessage());
@@ -189,7 +210,8 @@ public class OrderCompensationService {
     /**
      * 재고 복원 (Compensation)
      */
-    private void compensateStock(Order order, OrderSaga saga) {
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    protected void compensateStock(Order order, OrderSaga saga) {
         log.info(">>> 재고 복원 시작 - orderId: {}", order.getIdValue());
 
         try {
@@ -201,7 +223,15 @@ public class OrderCompensationService {
                 return;
             }
 
-            InventoryReservationResponse reserveResponse = (InventoryReservationResponse) stepData;
+//            InventoryReservationResponse reserveResponse = (InventoryReservationResponse) stepData;
+            // LinkedHashMap을 InventoryReservationResponse로 변환
+            InventoryReservationResponse reserveResponse;
+            if (stepData instanceof InventoryReservationResponse) {
+                reserveResponse = (InventoryReservationResponse) stepData;
+            } else {
+                // LinkedHashMap → InventoryReservationResponse 변환
+                reserveResponse = objectMapper.convertValue(stepData, InventoryReservationResponse.class);
+            }
 
             // 2. 재고 복원 요청
             InventoryRestoreRequest request = InventoryRestoreRequest.from(
@@ -222,8 +252,8 @@ public class OrderCompensationService {
             }
 
             // 4. Saga Step 완료
-            saga.completeCompensation(SagaStep.STOCK_RESTORE);
-            sagaRepository.save(saga);
+//            saga.completeCompensation(SagaStep.STOCK_RESTORE);
+//            sagaRepository.save(saga);
 
             log.info(">>> 재고 복원 완료 - orderId: {}, restoredQuantity: {}",
                     order.getIdValue(), response.getTotalRestoredQuantity());
