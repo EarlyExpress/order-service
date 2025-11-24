@@ -12,10 +12,12 @@ import com.early_express.order_service.domain.order.domain.model.SagaStep;
 import com.early_express.order_service.domain.order.domain.model.vo.OrderId;
 import com.early_express.order_service.domain.order.domain.repository.OrderRepository;
 import com.early_express.order_service.domain.order.domain.repository.OrderSagaRepository;
+import com.early_express.order_service.domain.order.infrastructure.client.hubdelivery.HubDeliveryClient;
 import com.early_express.order_service.domain.order.infrastructure.client.inventory.InventoryClient;
 import com.early_express.order_service.domain.order.infrastructure.client.inventory.dto.InventoryReservationResponse;
 import com.early_express.order_service.domain.order.infrastructure.client.inventory.dto.InventoryRestoreRequest;
 import com.early_express.order_service.domain.order.infrastructure.client.inventory.dto.InventoryRestoreResponse;
+import com.early_express.order_service.domain.order.infrastructure.client.lastmile.LastMileClient;
 import com.early_express.order_service.domain.order.infrastructure.client.payment.dto.PaymentVerificationResponse;
 import com.early_express.order_service.domain.order.infrastructure.messaging.payment.event.PaymentRefundFailedEvent;
 import com.early_express.order_service.domain.order.infrastructure.messaging.payment.event.PaymentRefundedEvent;
@@ -38,6 +40,8 @@ public class OrderCompensationService {
     private final OrderRepository orderRepository;
     private final OrderSagaRepository sagaRepository;
     private final InventoryClient inventoryClient;
+    private final HubDeliveryClient hubDeliveryClient;
+    private final LastMileClient lastMileClient;
     private final PaymentEventPublisher paymentEventPublisher;
     private final ObjectMapper objectMapper;
 
@@ -268,6 +272,200 @@ public class OrderCompensationService {
 
             throw e;
         }
+    }
+
+    /**
+     * 경로 계산 실패 시 보상 트랜잭션
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void startCompensationForRouteFailure(String orderId, String failureReason) {
+        log.info("경로 계산 실패 보상 시작 - orderId: {}", orderId);
+
+        Order order = findOrderById(orderId);
+        OrderSaga saga = findSagaByOrderId(orderId);
+
+        saga.startCompensation(failureReason);
+        saga = sagaRepository.save(saga);
+
+        var completedSteps = saga.getCompletedStepsNeedingCompensation();
+        log.info("보상 대상 Step 목록: {}", completedSteps);
+
+        for (SagaStep step : completedSteps.reversed()) {
+            saga = executeCompensationStepInternal(order, saga, step);
+        }
+
+        saga.completeAllCompensations();
+        sagaRepository.save(saga);
+
+        order.compensate();
+        orderRepository.save(order);
+
+        log.info("보상 트랜잭션 완료 - orderId: {}", orderId);
+    }
+
+    /**
+     * 개별 보상 Step 실행 (내부용)
+     */
+    private OrderSaga executeCompensationStepInternal(Order order, OrderSaga saga, SagaStep originalStep) {
+        SagaStep compensationStep = originalStep.getCompensationStep();
+
+        log.info(">>> 보상 Step 실행 - originalStep: {}, compensationStep: {}",
+                originalStep.getDescription(), compensationStep.getDescription());
+
+        saga.executeCompensation(originalStep, compensationStep);
+        saga = sagaRepository.save(saga);
+
+        try {
+            switch (compensationStep) {
+                case PAYMENT_CANCEL -> {
+                    // 결제 취소 이벤트 발행
+                    compensatePayment(order, saga);
+                    log.info(">>> 결제 취소 이벤트 발행 완료, PaymentRefundedEvent 대기 중");
+                    // 이벤트 기반이므로 완료 처리는 Consumer에서
+                    return saga;
+                }
+                case STOCK_RESTORE -> {
+                    // 재고 복원 (동기)
+                    compensateStockInternal(order, saga);
+                }
+                case HUB_DELIVERY_CANCEL -> {
+                    // 허브 배송 취소 (동기)
+                    compensateHubDelivery(order);
+                }
+                case LAST_MILE_DELIVERY_CANCEL -> {
+                    // 업체 배송 취소 (동기)
+                    compensateLastMileDelivery(order);
+                }
+                default -> throw new IllegalStateException(
+                        "지원하지 않는 보상 Step: " + compensationStep
+                );
+            }
+
+            // 완료 처리
+            saga.completeCompensation(compensationStep);
+            saga = sagaRepository.save(saga);
+
+            log.info(">>> 보상 Step 완료 - compensationStep: {}", compensationStep.getDescription());
+
+        } catch (Exception e) {
+            log.error("보상 Step 실패 - step: {}, error: {}",
+                    compensationStep.getDescription(), e.getMessage(), e);
+
+            saga.failCompensation(compensationStep, e.getMessage());
+            saga = sagaRepository.save(saga);
+
+            order.fail();
+            orderRepository.save(order);
+
+            throw e;
+        }
+
+        return saga;
+    }
+
+    /**
+     * 결제 취소 (이벤트 발행)
+     */
+    private void compensatePayment(Order order, OrderSaga saga) {
+        log.info(">>> 결제 취소 이벤트 발행 시작 - orderId: {}", order.getIdValue());
+
+        Object stepData = saga.getCompensationDataForStep(SagaStep.PAYMENT_VERIFY);
+
+        PaymentVerificationResponse verifyResponse;
+        if (stepData instanceof PaymentVerificationResponse) {
+            verifyResponse = (PaymentVerificationResponse) stepData;
+        } else {
+            verifyResponse = objectMapper.convertValue(stepData, PaymentVerificationResponse.class);
+        }
+
+        RefundRequestedEventData eventData = RefundRequestedEventData.of(
+                verifyResponse.getPaymentId(),
+                order.getIdValue(),
+                "주문 생성 실패로 인한 자동 취소"
+        );
+
+        paymentEventPublisher.publishRefundRequested(eventData);
+
+        log.info(">>> 결제 취소 이벤트 발행 완료 - orderId: {}, paymentId: {}",
+                order.getIdValue(), verifyResponse.getPaymentId());
+    }
+
+    /**
+     * 재고 복원 (내부용 - saga 저장 없음)
+     */
+    private void compensateStockInternal(Order order, OrderSaga saga) {
+        log.info(">>> 재고 복원 시작 - orderId: {}", order.getIdValue());
+
+        Object stepData = saga.getCompensationDataForStep(SagaStep.STOCK_RESERVE);
+
+        if (stepData == null) {
+            log.warn("재고 예약 데이터가 없음 - orderId: {}, 재고 복원 건너뜀", order.getIdValue());
+            return;
+        }
+
+        InventoryReservationResponse reserveResponse;
+        if (stepData instanceof InventoryReservationResponse) {
+            reserveResponse = (InventoryReservationResponse) stepData;
+        } else {
+            reserveResponse = objectMapper.convertValue(stepData, InventoryReservationResponse.class);
+        }
+
+        InventoryRestoreRequest request = InventoryRestoreRequest.from(
+                reserveResponse.getReservationId(),
+                order.getIdValue(),
+                reserveResponse.getReservedItems(),
+                "주문 생성 실패로 인한 재고 복원"
+        );
+
+        InventoryRestoreResponse response = inventoryClient.restoreStock(request);
+
+        if (!Boolean.TRUE.equals(response.getSuccess())) {
+            throw new SagaException(
+                    OrderErrorCode.SAGA_COMPENSATION_FAILED,
+                    "재고 복원에 실패했습니다: " + response.getMessage()
+            );
+        }
+
+        log.info(">>> 재고 복원 완료 - orderId: {}, restoredQuantity: {}",
+                order.getIdValue(), response.getTotalRestoredQuantity());
+    }
+
+    /**
+     * 허브 배송 취소
+     */
+    private void compensateHubDelivery(Order order) {
+        log.info(">>> 허브 배송 취소 시작 - orderId: {}", order.getIdValue());
+
+        String hubDeliveryId = order.getDeliveryInfo().getHubDeliveryId();
+
+        if (hubDeliveryId == null || hubDeliveryId.isBlank()) {
+            log.info(">>> 허브 배송 ID 없음, 취소 스킵 - orderId: {}", order.getIdValue());
+            return;
+        }
+
+         hubDeliveryClient.cancelDelivery(hubDeliveryId);
+
+        log.info(">>> 허브 배송 취소 완료 - orderId: {}, hubDeliveryId: {}",
+                order.getIdValue(), hubDeliveryId);
+    }
+
+    /**
+     * 업체 배송 취소
+     */
+    private void compensateLastMileDelivery(Order order) {
+        log.info(">>> 업체 배송 취소 시작 - orderId: {}", order.getIdValue());
+
+        String lastMileDeliveryId = order.getDeliveryInfo().getLastMileDeliveryId();
+
+        if (lastMileDeliveryId == null || lastMileDeliveryId.isBlank()) {
+            log.info(">>> 업체 배송 ID 없음, 취소 스킵 - orderId: {}", order.getIdValue());
+            return;
+        }
+
+         lastMileClient.cancelDelivery(lastMileDeliveryId);
+
+        log.info(">>> 업체 배송 취소 완료 - orderId: {}, lastMileDeliveryId: {}",
+                order.getIdValue(), lastMileDeliveryId);
     }
 
     /**
