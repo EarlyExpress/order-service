@@ -118,6 +118,41 @@ public class OrderQueryService {
     }
 
     /**
+     * 허브별 주문 목록 조회 (페이징)
+     * - 공급 허브, 수령 허브, 도착 허브 중 하나라도 해당되면 조회
+     *
+     * @param hubId 허브 ID
+     * @param pageable 페이징 정보
+     * @return 주문 목록 (페이징)
+     */
+    public Page<Order> getOrdersByHubId(String hubId, Pageable pageable) {
+        log.debug("허브별 주문 조회 - hubId: {}", hubId);
+
+        return orderRepository.findByHubId(hubId, pageable);
+    }
+
+    /**
+     * 허브별 주문 검색 (동적 쿼리)
+     * - 상태, 날짜 필터링 포함
+     *
+     * @param query 검색 조건
+     * @param pageable 페이징 정보
+     * @return 주문 목록 (페이징)
+     */
+    public Page<Order> searchOrdersByHubId(HubOrderSearchQuery query, Pageable pageable) {
+        log.debug("허브별 주문 검색 - hubId: {}, status: {}, startDate: {}, endDate: {}",
+                query.hubId(), query.status(), query.startDate(), query.endDate());
+
+        return orderRepository.searchOrdersByHubId(
+                query.hubId(),
+                query.status(),
+                query.startDate(),
+                query.endDate(),
+                pageable
+        );
+    }
+
+    /**
      * 주문 검색 (동적 쿼리)
      *
      * @param query 검색 조건
@@ -227,6 +262,17 @@ public class OrderQueryService {
      */
     public record OrderSearchQuery(
             String companyId,
+            OrderStatus status,
+            LocalDateTime startDate,
+            LocalDateTime endDate
+    ) {
+    }
+
+    /**
+     * 허브별 주문 검색 Query DTO
+     */
+    public record HubOrderSearchQuery(
+            String hubId,
             OrderStatus status,
             LocalDateTime startDate,
             LocalDateTime endDate
