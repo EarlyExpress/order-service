@@ -15,6 +15,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
@@ -33,6 +34,7 @@ public class OrderSagaRepositoryImpl implements OrderSagaRepository {
     private final QOrderSagaEntity qSaga = QOrderSagaEntity.orderSagaEntity;
 
     @Override
+    @Transactional
     public OrderSaga save(OrderSaga saga) {
         OrderSagaEntity entity;
 
@@ -51,12 +53,18 @@ public class OrderSagaRepositoryImpl implements OrderSagaRepository {
     }
 
     @Override
+    public void deleteAll() {
+        sagaJpaRepository.deleteAll();
+    }
+
+    @Override
     public Optional<OrderSaga> findById(SagaId sagaId) {
         return sagaJpaRepository.findById(sagaId.getValue())
                 .map(OrderSagaEntity::toDomain);
     }
 
     @Override
+    @Transactional
     public Optional<OrderSaga> findByOrderId(OrderId orderId) {
         return sagaJpaRepository.findByOrderId(orderId.getValue())
                 .map(OrderSagaEntity::toDomain);
@@ -197,4 +205,6 @@ public class OrderSagaRepositoryImpl implements OrderSagaRepository {
         }
         return null;
     }
+
+
 }
