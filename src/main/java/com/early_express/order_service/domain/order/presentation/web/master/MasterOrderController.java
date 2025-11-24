@@ -70,6 +70,7 @@ public class MasterOrderController {
      */
     @GetMapping("/orders/all")
     public ApiResponse<PageResponse<OrderSimpleResponse>> searchAllOrders(
+            @RequestHeader("X-Hub-Id") String hubId,
             @ModelAttribute OrderSearchRequest request,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
             Pageable pageable) {
@@ -100,7 +101,9 @@ public class MasterOrderController {
      * GET /v1/order/web/master/orders/{id}
      */
     @GetMapping("/orders/{id}")
-    public ApiResponse<MasterOrderDetailResponse> getOrder(@PathVariable String id) {
+    public ApiResponse<MasterOrderDetailResponse> getOrder(
+            @RequestHeader("X-Hub-Id") String hubId,
+            @PathVariable String id) {
 
         log.info("관리자 주문 상세 조회 - orderId: {}", id);
 
@@ -130,7 +133,9 @@ public class MasterOrderController {
      * GET /v1/order/web/master/orders/{id}/with-deleted
      */
     @GetMapping("/orders/{id}/with-deleted")
-    public ApiResponse<MasterOrderDetailResponse> getOrderIncludingDeleted(@PathVariable String id) {
+    public ApiResponse<MasterOrderDetailResponse> getOrderIncludingDeleted(
+            @RequestHeader("X-Hub-Id") String hubId,
+            @PathVariable String id) {
 
         log.info("관리자 주문 상세 조회 (삭제 포함) - orderId: {}", id);
 
@@ -148,6 +153,7 @@ public class MasterOrderController {
      */
     @GetMapping("/orders/upcoming-deadline")
     public ApiResponse<List<OrderSimpleResponse>> getUpcomingDeadlineOrders(
+            @RequestHeader("X-Hub-Id") String hubId,
             @RequestParam(defaultValue = "2") int hours) {
 
         log.info("발송 시한 임박 주문 조회 - hours: {}", hours);
@@ -167,7 +173,9 @@ public class MasterOrderController {
      * GET /v1/order/web/master/orders/overdue
      */
     @GetMapping("/orders/overdue")
-    public ApiResponse<List<OrderSimpleResponse>> getOverdueOrders() {
+    public ApiResponse<List<OrderSimpleResponse>> getOverdueOrders(
+            @RequestHeader("X-Hub-Id") String hubId
+    ) {
 
         log.info("발송 시한 초과 주문 조회");
 
