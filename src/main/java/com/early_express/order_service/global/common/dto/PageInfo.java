@@ -2,9 +2,12 @@ package com.early_express.order_service.global.common.dto;
 
 import lombok.Builder;
 import lombok.Getter;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Sort;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Getter
 public class PageInfo {
@@ -36,6 +39,25 @@ public class PageInfo {
         this.hasPrevious = page > 0;
         this.empty = numberOfElements == 0;
         this.sort = sort != null ? new ArrayList<>(sort) : new ArrayList<>();
+    }
+
+    public static PageInfo of(Page<?> page) {
+        List<SortInfo> sortInfoList = page.getSort().stream()
+                .map(order -> SortInfo.of(
+                        order.getProperty(),
+                        order.isAscending() ? SortInfo.Direction.ASC : SortInfo.Direction.DESC,
+                        order.isIgnoreCase()
+                ))
+                .collect(Collectors.toList());
+
+        return PageInfo.builder()
+                .page(page.getNumber())
+                .size(page.getSize())
+                .totalElements(page.getTotalElements())
+                .totalPages(page.getTotalPages())
+                .numberOfElements(page.getNumberOfElements())
+                .sort(sortInfoList)
+                .build();
     }
 
     // 정렬 정보 없이 생성 (기존 호환성 유지)
