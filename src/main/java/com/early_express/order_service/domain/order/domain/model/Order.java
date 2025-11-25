@@ -467,4 +467,11 @@ public class Order {
     public String getOrderNumberValue() {
         return this.orderNumber.getValue();
     }
+
+    /**
+     * 거치는 허브정보
+     * */
+    public String getRoutingHub() {
+        return aiCalculationResult.getRouteInfo();
+    }
 }
