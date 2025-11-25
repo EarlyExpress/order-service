@@ -23,55 +23,45 @@ public class KafkaPaymentEventPublisher implements PaymentEventPublisher {
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
-    @Value("${spring.kafka.topic.order-events:order-service-events}")
-    private String orderEventsTopic;
+    @Value("${spring.kafka.topic.refund-requested:refund-requested}")
+    private String refundRequestedTopic;
 
     /**
      * 환불 요청 이벤트 발행
-     * Topic: order-service-events
-     *
-     * @param eventData 환불 요청 이벤트 데이터
+     * Topic: refund-requested
      */
     @Override
     public void publishRefundRequested(RefundRequestedEventData eventData) {
         log.info("환불 요청 이벤트 발행 준비 - orderId: {}, paymentId: {}",
                 eventData.getOrderId(), eventData.getPaymentId());
 
-        try {
-            // 도메인 이벤트 → Kafka 이벤트 변환
-            RefundRequestedEvent kafkaEvent = RefundRequestedEvent.from(eventData);
+        // 도메인 이벤트 → Kafka 이벤트 변환
+        RefundRequestedEvent event = RefundRequestedEvent.from(eventData);
 
-            // Kafka 발행 (비동기)
-            CompletableFuture<SendResult<String, Object>> future = kafkaTemplate.send(
-                    orderEventsTopic,
-                    eventData.getOrderId(), // Key: orderId (파티셔닝)
-                    kafkaEvent
-            );
+        // Kafka 발행
+        sendEvent(refundRequestedTopic, eventData.getOrderId(), event);
 
-            // 발행 결과 처리
-            future.whenComplete((result, ex) -> {
-                if (ex != null) {
-                    log.error("환불 요청 이벤트 발행 실패 - orderId: {}, paymentId: {}, error: {}",
-                            eventData.getOrderId(),
-                            eventData.getPaymentId(),
-                            ex.getMessage(),
-                            ex);
-                } else {
-                    log.info("환불 요청 이벤트 발행 완료 - orderId: {}, paymentId: {}, partition: {}, offset: {}",
-                            eventData.getOrderId(),
-                            eventData.getPaymentId(),
-                            result.getRecordMetadata().partition(),
-                            result.getRecordMetadata().offset());
-                }
-            });
+        log.info("환불 요청 이벤트 발행 완료 - topic: {}, orderId: {}, paymentId: {}",
+                refundRequestedTopic, eventData.getOrderId(), eventData.getPaymentId());
+    }
 
-        } catch (Exception e) {
-            log.error("환불 요청 이벤트 발행 중 예외 발생 - orderId: {}, paymentId: {}, error: {}",
-                    eventData.getOrderId(),
-                    eventData.getPaymentId(),
-                    e.getMessage(),
-                    e);
-            throw new RuntimeException("환불 요청 이벤트 발행 실패", e);
-        }
+    /**
+     * Kafka로 이벤트 발행 (공통 헬퍼 메서드)
+     */
+    private void sendEvent(String topic, String key, Object event) {
+        CompletableFuture<SendResult<String, Object>> future =
+                kafkaTemplate.send(topic, key, event);
+
+        future.whenComplete((result, ex) -> {
+            if (ex != null) {
+                log.error("이벤트 발행 실패 - topic: {}, key: {}, eventType: {}, error: {}",
+                        topic, key, event.getClass().getSimpleName(), ex.getMessage());
+            } else {
+                log.debug("이벤트 발행 성공 - topic: {}, partition: {}, offset: {}",
+                        topic,
+                        result.getRecordMetadata().partition(),
+                        result.getRecordMetadata().offset());
+            }
+        });
     }
 }

@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
 /**
  * 환불 요청 이벤트 (Kafka 전송용)
  * Order Service → Payment Service
- * Topic: order-service-events
+ * Topic: refund-requested
  */
 @Getter
 @SuperBuilder
@@ -37,8 +37,7 @@ public class RefundRequestedEvent extends BaseEvent {
                 .requestedAt(data.getRequestedAt())
                 .build();
 
-        // BaseEvent 초기화
-        event.initBaseEvent("RefundRequestedEvent", "order-service");
+        event.initBaseEvent("REFUND_REQUESTED", "order-service");
 
         return event;
     }

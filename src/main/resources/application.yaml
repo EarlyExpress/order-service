@@ -63,14 +63,25 @@ spring:
       ack-mode: manual  # 수동 승인 모드 (메시지 처리 보장)
       concurrency: 3  # 동시 처리 리스너 수
     # ----- Topic 설정 -----
+    # 토픽 설정 (토픽 분리 패턴)
     topic:
-      # Order Service가 발행하는 토픽
-      order-events: ${KAFKA_TOPIC_ORDER_EVENTS:order-service-events}
-      order-payment-verified: ${KAFKA_TOPIC_ORDER_PAYMENT_VERIFIED:order-payment-verified}
-      # Payment Service가 발행하는 토픽 (Order Service가 구독)
-      payment-events: ${KAFKA_TOPIC_PAYMENT_EVENTS:payment-events}
-      notification-requested-event: notification-requested-event
+      # ===== 발행 토픽 (Order → 다른 서비스) =====
+      # Order 내부 이벤트
+      order-payment-verified: order-payment-verified
+
+      # Order → Payment
+      refund-requested: refund-requested
+
+      # Order → Tracking
       tracking-start-requested-event: tracking-start-requested-event
+
+      # Order → Notification
+      notification-requested-event: notification-requested-event
+
+      # ===== 구독 토픽 (다른 서비스 → Order) =====
+      # Payment → Order
+      payment-refunded: payment-refunded
+      payment-refund-failed: payment-refund-failed
 
 # ===== 서버 포트 설정 =====
 server:

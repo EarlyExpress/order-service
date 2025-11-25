@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
 /**
  * 환불 실패 이벤트 (Kafka 수신용)
  * Payment Service → Order Service
- * Topic: payment-events
+ * Topic: payment-refund-failed
  */
 @Getter
 @SuperBuilder
