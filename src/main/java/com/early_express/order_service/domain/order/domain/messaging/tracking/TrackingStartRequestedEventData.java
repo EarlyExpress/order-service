@@ -44,6 +44,10 @@ public class TrackingStartRequestedEventData {
     private final String destinationHubId;
 
     /**
+     * 거치는 허브
+     * */
+    private final String routingHub;
+    /**
      * 허브 배송 필요 여부
      */
     private final Boolean requiresHubDelivery;
@@ -68,6 +72,7 @@ public class TrackingStartRequestedEventData {
             String lastMileDeliveryId,
             String originHubId,
             String destinationHubId,
+            String routingHub,
             Boolean requiresHubDelivery,
             LocalDateTime estimatedDeliveryTime) {
 
@@ -78,6 +83,7 @@ public class TrackingStartRequestedEventData {
                 .lastMileDeliveryId(lastMileDeliveryId)
                 .originHubId(originHubId)
                 .destinationHubId(destinationHubId)
+                .routingHub(routingHub)
                 .requiresHubDelivery(requiresHubDelivery)
                 .estimatedDeliveryTime(estimatedDeliveryTime)
                 .requestedAt(LocalDateTime.now())
