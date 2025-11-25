@@ -814,6 +814,7 @@ public class OrderSagaOrchestratorService {
                     order.getDeliveryInfo().getLastMileDeliveryId(),
                     order.getProductInfo().getProductHubId(),
                     order.getDestinationHubId(),
+                    order.getRoutingHub(),
                     order.getDeliveryInfo().getRequiresHubDelivery(),
                     order.getAiCalculationResult().getEstimatedDeliveryTime()
             );
