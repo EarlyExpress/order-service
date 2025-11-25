@@ -61,13 +61,13 @@ class OrderSagaOrchestratorServiceTest {
     @MockBean
     private PaymentEventPublisher paymentEventPublisher;
 
-    @MockBean
+    @MockitoBean
     private OrderEventPublisher orderEventPublisher;
 
-    @MockBean
+    @MockitoBean
     private NotificationEventPublisher notificationEventPublisher;
 
-    @MockBean
+    @MockitoBean
     private TrackingEventPublisher trackingEventPublisher;
 
     @MockitoBean
