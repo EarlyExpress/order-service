@@ -19,8 +19,8 @@ public class SwaggerConfig {
     public OpenAPI openAPI() {
         return new OpenAPI()
                 .info(new Info()
-                        .title("Default Server API Documentation")
-                        .description("Early Express Default Server REST API")
+                        .title("Order Server API Documentation")
+                        .description("Early Express Order Server REST API")
                         .version("1.0.0")
                         .contact(new Contact()
                                 .name("Early Express Team")
