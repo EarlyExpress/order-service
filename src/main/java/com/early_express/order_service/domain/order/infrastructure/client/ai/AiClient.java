@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RequestBody;
  */
 @FeignClient(
         name = "ai-service",
-        url = "${client.ai-service.url}",
+//        url = "${client.ai-service.url}",
         configuration = AiClientConfig.class
 )
 public interface AiClient {
