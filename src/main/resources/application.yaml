@@ -73,7 +73,7 @@ spring:
       refund-requested: refund-requested
 
       # Order → Tracking
-      tracking-start-requested-event: tracking-start-requested-event
+      tracking-start-requested: tracking-start-requested
 
       # Order → Notification
       notification-requested-event: notification-requested-event
