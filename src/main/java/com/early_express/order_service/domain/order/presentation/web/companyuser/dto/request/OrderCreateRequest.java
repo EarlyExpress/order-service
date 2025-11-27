@@ -80,6 +80,9 @@ public class OrderCreateRequest {
     @NotBlank(message = "PG 결제 ID는 필수입니다.")
     private String pgPaymentId;
 
+    @NotBlank(message = "PG 결제 키는 필수입니다.")  // 추가
+    private String pgPaymentKey;
+
     /**
      * Request → Command 변환
      */
@@ -104,6 +107,7 @@ public class OrderCreateRequest {
                 .specialInstructions(specialInstructions)
                 .pgProvider(pgProvider)
                 .pgPaymentId(pgPaymentId)
+                .pgPaymentKey(pgPaymentKey)
                 .createdBy(createdBy)
                 .build();
     }

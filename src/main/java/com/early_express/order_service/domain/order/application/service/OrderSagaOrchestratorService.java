@@ -896,15 +896,12 @@ public class OrderSagaOrchestratorService {
         AiCalculationResult aiResult = order.getAiCalculationResult();
 
         return LastMileDeliveryCreateRequest.of(
-                order.getIdValue(),
-                order.getDestinationHubId(),                           // 도착 허브 (배송 출발점)
-                order.getCompanyInfo().getReceiverCompanyId(),         // 수령 업체 ID
-                order.getReceiverInfo().getDeliveryAddress(),          // 받는 곳 주소
-                order.getReceiverInfo().getDeliveryAddressDetail(),    // 상세 주소
-                order.getReceiverInfo().getReceiverName(),             // 받는 사람 이름
-                order.getReceiverInfo().getReceiverPhone(),            // 받는 사람 전화번호
-                formatDateTime(aiResult.getEstimatedDeliveryTime()),   // 예상 도착 시간
-                order.getRequestInfo().getSpecialInstructions()        // 특이사항
+                order.getIdValue(),                                    // 주문 ID
+                order.getDestinationHubId(),                           // 도착 허브 ID
+                order.getReceiverInfo().getDeliveryAddress(),          // 배송 주소
+                order.getReceiverInfo().getReceiverName(),             // 수령인 이름
+                order.getReceiverInfo().getReceiverPhone(),            // Slack ID (일단 phone으로)
+                aiResult.getEstimatedDeliveryTime()                    // 예상 도착 시간 (LocalDateTime)
         );
     }
 
