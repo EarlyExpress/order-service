@@ -185,30 +185,30 @@ public class OrderCompensationService {
         log.error(">>> 환불 실패 이벤트 처리 - orderId: {}, paymentId: {}, error: {}",
                 event.getOrderId(), event.getPaymentId(), event.getErrorMessage());
 
-        try {
-            // 1. Order 및 Saga 조회
-            Order order = findOrderById(event.getOrderId());
-            OrderSaga saga = findSagaByOrderId(event.getOrderId());
-
-            // 2. 보상 실패 처리
-            saga.failCompensation(
-                    SagaStep.PAYMENT_CANCEL,
-                    event.getErrorMessage()
-            );
-            sagaRepository.save(saga);
-
-            order.fail();
-            orderRepository.save(order);
-
-            log.error(">>> 환불 실패 처리 완료 - orderId: {}, 수동 개입 필요", event.getOrderId());
-
-            // TODO: 관리자 알림 발송
-
-        } catch (Exception e) {
-            log.error("환불 실패 처리 중 오류 - orderId: {}, error: {}",
-                    event.getOrderId(), e.getMessage(), e);
-            throw e;
-        }
+//        try {
+//            // 1. Order 및 Saga 조회
+//            Order order = findOrderById(event.getOrderId());
+//            OrderSaga saga = findSagaByOrderId(event.getOrderId());
+//
+//            // 2. 보상 실패 처리
+//            saga.failCompensation(
+//                    SagaStep.PAYMENT_CANCEL,
+//                    event.getErrorMessage()
+//            );
+//            sagaRepository.save(saga);
+//
+//            order.fail();
+//            orderRepository.save(order);
+//
+//            log.error(">>> 환불 실패 처리 완료 - orderId: {}, 수동 개입 필요", event.getOrderId());
+//
+//            // TODO: 관리자 알림 발송
+//
+//        } catch (Exception e) {
+//            log.error("환불 실패 처리 중 오류 - orderId: {}, error: {}",
+//                    event.getOrderId(), e.getMessage(), e);
+//            throw e;
+//        }
     }
 
     /**
