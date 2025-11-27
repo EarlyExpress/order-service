@@ -5,6 +5,7 @@ import com.early_express.order_service.domain.order.infrastructure.client.invent
 import com.early_express.order_service.domain.order.infrastructure.client.inventory.dto.InventoryRestoreRequest;
 import com.early_express.order_service.domain.order.infrastructure.client.inventory.dto.InventoryRestoreResponse;
 import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
@@ -14,7 +15,7 @@ import org.springframework.web.bind.annotation.RequestBody;
  */
 @FeignClient(
         name = "inventory-service",
-        url = "${client.inventory-service.url}",
+//        url = "${client.inventory-service.url}",
         configuration = InventoryClientConfig.class
 )
 public interface InventoryClient {
@@ -27,7 +28,7 @@ public interface InventoryClient {
      * @param request 재고 예약 요청
      * @return 예약 정보 (reservationId, productHubId, reservedQuantity)
      */
-    @PostMapping("/v1/inventory/internal/all/reserve")
+    @PostMapping("/v1/inventory/internal/reservations")
     InventoryReservationResponse reserveStock(
             @RequestBody InventoryReservationRequest request
     );
@@ -40,7 +41,7 @@ public interface InventoryClient {
      * @param request 재고 복원 요청
      * @return 복원 결과
      */
-    @PostMapping("/v1/inventory/internal/all/restore")
+    @DeleteMapping("/v1/inventory/internal/reservations/{orderId}")
     InventoryRestoreResponse restoreStock(
             @RequestBody InventoryRestoreRequest request
     );
