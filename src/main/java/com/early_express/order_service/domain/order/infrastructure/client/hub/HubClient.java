@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RequestBody;
  */
 @FeignClient(
         name = "hub-service",
-        url = "${client.hub-service.url}",
+//        url = "${client.hub-service.url}",
         configuration = HubClientConfig.class
 )
 public interface HubClient {
