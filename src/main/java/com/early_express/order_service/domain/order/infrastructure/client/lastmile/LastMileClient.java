@@ -12,8 +12,9 @@ import org.springframework.web.bind.annotation.RequestBody;
  * 업체 배송 서비스와의 동기 통신
  */
 @FeignClient(
-        name = "last-mile-service",
-        url = "${client.last-mile-service.url}",
+//        name = "last-mile-delivery-service",
+        name = "delivery-service",
+//        url = "${client.last-mile-service.url}",
         configuration = LastMileClientConfig.class
 )
 public interface LastMileClient {
