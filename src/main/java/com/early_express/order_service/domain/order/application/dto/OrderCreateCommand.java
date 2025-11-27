@@ -42,6 +42,7 @@ public class OrderCreateCommand {
     // ===== PG 결제 정보 =====
     private String pgProvider;
     private String pgPaymentId;
+    private String pgPaymentKey;
 
     // ===== 생성자 =====
     private String createdBy;
