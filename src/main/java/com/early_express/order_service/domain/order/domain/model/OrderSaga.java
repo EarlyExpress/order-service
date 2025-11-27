@@ -115,9 +115,10 @@ public class OrderSaga {
         // 마지막 Step이면 Saga 완료
         if (step.isLastStep()) {
             this.complete();
-        } else {
-            this.currentStep = step.getNextStep();
         }
+//        else {
+//            this.currentStep = step.getNextStep();
+//        }
     }
 
     /**
