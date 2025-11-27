@@ -33,10 +33,11 @@ public class PgPaymentInfo {
     /**
      * PG 결제 정보 생성
      */
-    public static PgPaymentInfo of(String pgProvider, String pgPaymentId) {
+    public static PgPaymentInfo of(String pgProvider, String pgPaymentId, String pgPaymentKey) {
         return PgPaymentInfo.builder()
                 .pgProvider(pgProvider)
                 .pgPaymentId(pgPaymentId)
+                .pgPaymentKey(pgPaymentKey)
                 .build();
     }
 
