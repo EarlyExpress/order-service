@@ -75,7 +75,8 @@ public class OrderCommandService {
 
         PgPaymentInfo pgPaymentInfo = PgPaymentInfo.of(
                 command.getPgProvider(),
-                command.getPgPaymentId()
+                command.getPgPaymentId(),
+                command.getPgPaymentKey()
         );
 
         // 3. Order Aggregate 생성
