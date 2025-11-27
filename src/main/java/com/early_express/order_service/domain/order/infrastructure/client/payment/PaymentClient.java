@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RequestBody;
  */
 @FeignClient(
         name = "payment-service",
-        url = "${client.payment-service.url}",
+//        url = "${client.payment-service.url}",
         configuration = PaymentClientConfig.class
 )
 public interface PaymentClient {
